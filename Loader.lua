@@ -923,14 +923,17 @@ local Library do
 	end
 
     -- [Feature: Config Export] The Theming subpage registers a colorpicker
-    -- flag per theme colour (e.g. "AccentTheme", "GradientTheme") plus a
-    -- "ThemePreset" dropdown flag, all in the same global Library.Flags
-    -- table as every other feature flag (toggles/sliders/etc). Those two
-    -- patterns are theme state, not user-selected feature config, so they
-    -- must be excluded here or Export/Import Config ends up dumping (and
+    -- flag per theme colour (e.g. "AccentTheme", "GradientTheme"), a
+    -- "ThemePreset" dropdown flag, and derived animation flags built by
+    -- appending onto that colorpicker flag (e.g. "BorderThemeAnimation
+    -- Keyframe1", "AccentThemeAnimationSpeed") -- all in the same global
+    -- Library.Flags table as every other feature flag (toggles/sliders/
+    -- etc). All of these contain "Theme" somewhere in the name, which is
+    -- theme state, not user-selected feature config, so they must be
+    -- excluded here or Export/Import Config ends up dumping (and
     -- overwriting) the theme instead of the actual saved selections.
     Library.IsThemeFlag = function(self, Index)
-        return Index == "ThemePreset" or (type(Index) == "string" and StringFind(Index, "Theme$") ~= nil)
+        return type(Index) == "string" and StringFind(Index, "Theme") ~= nil
     end
 
     Library.GetConfig = function(self)
@@ -7164,15 +7167,47 @@ end)
                 -- GetConfig/LoadConfig so Export always dumps whatever is
                 -- currently set (no saved file needs to be selected first)
                 -- and Import never touches theme flags (see IsThemeFlag).
+                -- [Feature: Config Export] Export/Import of the actual saved
+                -- config files in Library.Folders.Configs (same data as the
+                -- config list/Save/Load on Side 1) -- not the theme colours,
+                -- which have their own identical-looking Section on the
+                -- Theming subpage instead (GetThemeConfig/LoadThemeConfig).
+                -- Export dumps the raw JSON of whatever's selected in the
+                -- list; Import writes whatever JSON is pasted into the box
+                -- to disk as a new config under the typed name, rather than
+                -- just live-loading it, so it shows up in the list like any
+                -- other saved config.
                 if Library.AllowConfigExport then
+                    local ImportConfigName
+
                     local ExportImportSection = ConfigsSubPage:Section({Name = "Export / Import Config", Side = 2}) do
+                        ExportImportSection:Textbox({
+                            Name = "Import as",
+                            Default = "",
+                            Flag = "ImportConfigName",
+                            Placeholder = "Enter a name for the imported config",
+                            Callback = function(Value)
+                                ImportConfigName = Value
+                            end
+                        })
+
                         local ConfigBox = Library:BuildExportImportBox(ExportImportSection.Items["Content"].Instance)
 
                         local ExportButton = ExportImportSection:Button()
 
-                        ExportButton:Add("Export", function()
-                            ConfigBox:SetText(Library:GetConfig())
-                            Library:Notification("Success", "Exported current config below", 3)
+                        local ExportActionButton = ExportButton:Add("Export", function()
+                            if not ConfigSelected then
+                                return
+                            end
+
+                            local Success, Result = pcall(readfile, Library.Folders.Configs .. "/" .. ConfigSelected)
+
+                            if Success then
+                                ConfigBox:SetText(Result)
+                                Library:Notification("Success", "Exported config "..ConfigSelected:gsub("%.json$", "").." below", 3)
+                            else
+                                Library:Notification("Error", "Failed to read config "..ConfigSelected, 5)
+                            end
                         end)
 
                         ExportButton:Add("Copy", function()
@@ -7194,17 +7229,49 @@ end)
                                 return
                             end
 
-                            local Ok, Err = Library:LoadConfig(Text)
-                            if Ok then
-                                Library:Notification("Success", "Config imported successfully", 5)
-                            else
-                                Library:Notification("Error", "Import failed: " .. tostring(Err), 5)
+                            if not ImportConfigName or ImportConfigName == "" then
+                                Library:Notification("Error", "Please enter a name for the imported config", 5)
+                                return
                             end
+
+                            local DecodeOk = pcall(HttpService.JSONDecode, HttpService, Text)
+                            if not DecodeOk then
+                                Library:Notification("Error", "Import failed: pasted text isn't valid JSON", 5)
+                                return
+                            end
+
+                            local FileName = ImportConfigName .. ".json"
+
+                            if isfile(Library.Folders.Configs .. "/" .. FileName) then
+                                Library:Notification("Error", "Config with the name "..ImportConfigName .. " already exists", 5)
+                                return
+                            end
+
+                            writefile(Library.Folders.Configs .. "/" .. FileName, Text)
+                            Library:Notification("Success", "Imported config "..ImportConfigName .. " succesfully", 5)
+                            Library:RefreshConfigsList(ConfigsSearchbox)
                         end)
 
                         ImportClearButton:Add("Clear", function()
                             ConfigBox:SetText("")
                         end)
+
+                        -- Same selection-gated greying as Delete/Load/Autoload,
+                        -- plus a label swap since "Export" doesn't make sense
+                        -- to leave up when there's nothing selected to export.
+                        local function UpdateExportButton()
+                            local HasSelection = ConfigSelected ~= nil and ConfigSelected ~= ""
+                            ExportActionButton:SetEnabled(HasSelection)
+                            ExportActionButton:SetText(HasSelection and "Export" or "No config selected")
+                        end
+
+                        UpdateExportButton()
+
+                        local PreviousUpdateSelectionDependentButtons = UpdateSelectionDependentButtons
+                        UpdateSelectionDependentButtons = function()
+                            PreviousUpdateSelectionDependentButtons()
+                            UpdateExportButton()
+                        end
                     end
                 end
             end
