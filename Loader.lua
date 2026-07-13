@@ -668,12 +668,16 @@ local Library do
             Maximum = Maximum or Vector2New(9999, 9999)
 
             local HandleThickness = 6
-            local Gap = 2
 
             -- Strips are parented INSIDE the window frame (same as the
             -- corner handle) and positioned with Scale + Offset so they
             -- automatically follow the window's position/size with no
             -- RenderStepped tracking needed.
+            --
+            -- NOTE: the window Frame has ClipsDescendants = true, so strips
+            -- must stay fully WITHIN the frame's bounds. Any child positioned
+            -- outside those bounds (e.g. with a negative offset) gets clipped
+            -- and becomes both invisible and unclickable.
             local function MakeStrip(Position, Size, AnchorPoint)
                 local Strip = Instances:Create("TextButton", {
                     Parent = Gui,
@@ -700,10 +704,10 @@ local Library do
                 return Strip
             end
 
-            local StripRight = MakeStrip(UDim2New(1, Gap, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
-            local StripLeft = MakeStrip(UDim2New(0, -Gap, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(1, 0))
-            local StripTop = MakeStrip(UDim2New(0, 0, 0, -Gap), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 1))
-            local StripBottom = MakeStrip(UDim2New(0, 0, 1, Gap), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 0))
+            local StripRight = MakeStrip(UDim2New(1, -HandleThickness, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
+            local StripLeft = MakeStrip(UDim2New(0, 0, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
+            local StripTop = MakeStrip(UDim2New(0, 0, 0, 0), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 0))
+            local StripBottom = MakeStrip(UDim2New(0, 0, 1, -HandleThickness), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 0))
 
             local EdgeResizing = false
             local EdgeResizeFn = nil
@@ -1085,7 +1089,7 @@ local Library do
     -- back to Callback(Text).
     Library.OpenConfigBox = function(self, Title, Mode, PresetText, Callback)
         local Overlay = Instances:Create("Frame", {
-            Parent = Library.Holder,
+            Parent = Library.Holder.Instance,
             Name = "\0",
             Size = UDim2New(1, 0, 1, 0),
             Position = UDim2New(0, 0, 0, 0),
