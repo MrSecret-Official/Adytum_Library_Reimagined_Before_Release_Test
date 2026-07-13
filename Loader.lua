@@ -589,23 +589,30 @@ local Library do
             local HandleThickness = 6
             local Gap = 2
 
-            local function MakeStrip()
+            -- Strips are parented INSIDE the window frame (same as the
+            -- corner handle) and positioned with Scale + Offset so they
+            -- automatically follow the window's position/size with no
+            -- RenderStepped tracking needed.
+            local function MakeStrip(Position, Size, AnchorPoint)
                 return Instances:Create("TextButton", {
-                    Parent = Gui.Parent,
+                    Parent = Gui,
                     Name = "\0",
+                    AnchorPoint = AnchorPoint,
+                    Position = Position,
+                    Size = Size,
                     BackgroundTransparency = 1,
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
                     ZIndex = 999,
-                    Size = UDim2New(0, 0, 0, 0),
+                    Active = true,
                 })
             end
 
-            local StripRight = MakeStrip()
-            local StripLeft = MakeStrip()
-            local StripTop = MakeStrip()
-            local StripBottom = MakeStrip()
+            local StripRight = MakeStrip(UDim2New(1, Gap, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
+            local StripLeft = MakeStrip(UDim2New(0, -Gap, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(1, 0))
+            local StripTop = MakeStrip(UDim2New(0, 0, 0, -Gap), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 1))
+            local StripBottom = MakeStrip(UDim2New(0, 0, 1, Gap), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 0))
 
             local EdgeResizing = false
             local EdgeResizeFn = nil
@@ -676,34 +683,6 @@ local Library do
                         EdgeResizeFn(Input.Position.X - EdgeMouseStart.X, Input.Position.Y - EdgeMouseStart.Y)
                     end
                 end
-            end)
-
-            Library:Connect(RunService.RenderStepped, function()
-                local Visible = Gui.Visible
-
-                StripRight.Instance.Visible = Visible
-                StripLeft.Instance.Visible = Visible
-                StripTop.Instance.Visible = Visible
-                StripBottom.Instance.Visible = Visible
-
-                if not Visible then
-                    return
-                end
-
-                local AX, AY = Gui.AbsolutePosition.X, Gui.AbsolutePosition.Y
-                local AW, AH = Gui.AbsoluteSize.X, Gui.AbsoluteSize.Y
-
-                StripRight.Instance.Size = UDim2New(0, HandleThickness, 0, AH)
-                StripRight.Instance.Position = UDim2New(0, AX + AW + Gap, 0, AY)
-
-                StripLeft.Instance.Size = UDim2New(0, HandleThickness, 0, AH)
-                StripLeft.Instance.Position = UDim2New(0, AX - HandleThickness - Gap, 0, AY)
-
-                StripTop.Instance.Size = UDim2New(0, AW, 0, HandleThickness)
-                StripTop.Instance.Position = UDim2New(0, AX, 0, AY - HandleThickness - Gap)
-
-                StripBottom.Instance.Size = UDim2New(0, AW, 0, HandleThickness)
-                StripBottom.Instance.Position = UDim2New(0, AX, 0, AY + AH + Gap)
             end)
         end
 
@@ -839,22 +818,7 @@ local Library do
         PaddingLeft = UDimNew(0, 12)
     })
 
-    Library.AutosaveConfig = function(self)
-        local Success, Result = self:SafeCall(function()
-            if not isfolder(self.Folders.Configs) then
-                makefolder(self.Folders.Configs)
-            end
-
-            writefile(self.Folders.Configs .. "/Autosave.json", self:GetConfig())
-        end)
-
-        return Success, Result
-    end
-
     Library.Unload = function(self)
-        -- Mandatory: settings are always saved before the UI is torn down
-        self:AutosaveConfig()
-
         for Index, Value in self.Connections do 
             Value.Connection:Disconnect()
         end
@@ -1015,22 +979,6 @@ local Library do
         end)
 
         return Success, Result
-    end
-
-    Library.AutoloadConfig = function(self)
-        -- Call this AFTER all Windows/Pages/Sections/Elements have been built,
-        -- so every Flag exists and can be restored from the saved file.
-        local AutosavePath = self.Folders.Configs .. "/Autosave.json"
-
-        if isfile(AutosavePath) then
-            local Success, Result = self:SafeCall(function()
-                self:LoadConfig(readfile(AutosavePath))
-            end)
-
-            return Success, Result
-        end
-
-        return false, "No autosave file found"
     end
 
     Library.DeleteConfig = function(self, Config)
@@ -4898,7 +4846,9 @@ local function getPing()
 end
 
 -- Start watermark update loop (single Heartbeat, lightweight frame counter)
-local updateConnection = RunService.Heartbeat:Connect(function()
+-- Tracked via Library:Connect so Library:Unload() (and the Panic button)
+-- actually disconnects it instead of leaving it running forever.
+Library:Connect(RunService.Heartbeat, function()
     wmFrameCount += 1
     local now = tick()
     if now - wmLastDisplayUpdate >= wmUpdateInterval then
@@ -4908,7 +4858,9 @@ local updateConnection = RunService.Heartbeat:Connect(function()
         wmFrameCount = 0
         wmLastTime   = now
         wmLastDisplayUpdate = now
-        Items["Text"].Instance.Text = string.format("%s | %d fps | %d ms", Name, wmCachedFPS, wmLastPing)
+        if Items["Text"] and Items["Text"].Instance then
+            Items["Text"].Instance.Text = string.format("%s | %d fps | %d ms", Name, wmCachedFPS, wmLastPing)
+        end
     end
 end)
 
