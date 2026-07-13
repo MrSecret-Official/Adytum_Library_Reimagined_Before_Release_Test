@@ -1504,15 +1504,19 @@ local Library do
                 })
 
                 if Data.SubPages then
-                    Items["SubPages"] = Instances:Create("Frame", {
+                    Items["SubPages"] = Instances:Create("ScrollingFrame", {
                         Parent = Items["Page"].Instance,
                         Name = "\0",
-                        Size = UDim2New(0, 0, 0, 35),
+                        Size = UDim2New(1, 0, 0, 35),
                         BorderColor3 = FromRGB(42, 49, 45),
                         BorderSizePixel = 2,
-                        AutomaticSize = Enum.AutomaticSize.X,
+                        AutomaticCanvasSize = Enum.AutomaticCanvasSize.X,
+                        CanvasSize = UDim2New(0, 0, 0, 0),
+                        ScrollingDirection = Enum.ScrollingDirection.X,
+                        ScrollBarThickness = 3,
+                        ScrollBarImageColor3 = FromRGB(58, 138, 224),
                         BackgroundColor3 = FromRGB(20, 24, 21)
-                    })  Items["SubPages"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Outline"})
+                    })  Items["SubPages"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Outline", ScrollBarImageColor3 = "Accent"})
 
                     Items["SubPages"]:Border("Border")
 
