@@ -6143,7 +6143,7 @@ end)
                 BackgroundColor3 = FromRGB(20, 24, 21)
             })  Items["Section"]:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
 
-            Items[\"Section\"]:Border(\"Border\")
+            Items["Section"]:Border("Border")
 
             -- [Feature: Corner Radius] Section box UICorner
             local BoxCorner = InstanceNew("UICorner")
