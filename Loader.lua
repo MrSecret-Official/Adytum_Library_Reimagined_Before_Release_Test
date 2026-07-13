@@ -78,9 +78,9 @@ local Library do
         FadeSpeed = 0.2,
 
         Folders = {
-            Directory = "matcha",
-            Configs = "matcha/Configs",
-            Assets = "matcha/Assets",
+            Directory = "Adytum_libraryfolder",
+            Configs   = "Adytum_libraryfolder/Configs",
+            Assets    = "Adytum_libraryfolder/Assets",
         },
 
         Images = {
@@ -120,6 +120,38 @@ local Library do
         KeyList = nil,
 
         Colorpickers = { },
+
+        -- [Feature: Theme Presets] Registry of colour presets
+        ThemePresets = { },
+        ActivePreset  = "Default",
+        AllowThemePresets = true,   -- dev sets false to hide preset picker from users
+
+        -- [Feature: Config Export] Toggle export/import buttons in settings
+        AllowConfigExport = true,   -- dev sets false to disable
+
+        -- [Feature: Corner Radius] Per-type corner radius values and registry
+        CornerRadius = {
+            Window  = 6,
+            Boxes   = 3,
+            Sliders = 0,
+        },
+        CornerRadiusDefaults = {
+            Window  = 6,
+            Boxes   = 3,
+            Sliders = 0,
+        },
+        CornerItems = {
+            Window  = { },
+            Boxes   = { },
+            Sliders = { },
+        },
+
+        -- [Feature: Title] Window title text and position
+        TitleText     = "",
+        TitlePosition = "Topbar",   -- "Topbar" | "Logo" | "None"
+
+        -- [Feature: Credits] Entries shown in the Credits sub-page
+        Credits = { },
     }
 
     Library.__index = Library
@@ -214,10 +246,45 @@ local Library do
 			["Text Stroke"] = FromRGB(0, 0, 0),
 			["Placeholder Text"] = FromRGB(138, 160, 184),
 			["Accent"] = FromRGB(58, 138, 224)               -- 🌊 Azul marino brillante (acento)
-		}
+		},
+		-- [Feature: Theme Presets] Built-in: Midnight (deep violet)
+		["Midnight"] = {
+			["Background"]      = FromRGB(8, 6, 18),
+			["Border"]          = FromRGB(22, 18, 44),
+			["Inline"]          = FromRGB(15, 12, 30),
+			["Hovered Element"] = FromRGB(52, 38, 110),
+			["Page Background"] = FromRGB(12, 9, 24),
+			["Outline"]         = FromRGB(80, 58, 160),
+			["Element"]         = FromRGB(18, 14, 38),
+			["Gradient"]        = FromRGB(100, 60, 200),
+			["Text"]            = FromRGB(230, 220, 255),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(160, 140, 200),
+			["Accent"]          = FromRGB(130, 80, 255)
+		},
+		-- [Feature: Theme Presets] Built-in: Ember (warm orange)
+		["Ember"] = {
+			["Background"]      = FromRGB(18, 8, 6),
+			["Border"]          = FromRGB(44, 20, 16),
+			["Inline"]          = FromRGB(28, 12, 10),
+			["Hovered Element"] = FromRGB(110, 45, 30),
+			["Page Background"] = FromRGB(22, 10, 8),
+			["Outline"]         = FromRGB(160, 70, 40),
+			["Element"]         = FromRGB(35, 14, 12),
+			["Gradient"]        = FromRGB(200, 80, 40),
+			["Text"]            = FromRGB(255, 235, 220),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(200, 160, 140),
+			["Accent"]          = FromRGB(255, 100, 50)
+		},
     }
 
     Library.Theme = TableClone(Themes["Preset"])
+
+    -- Register all built-in presets ("Preset" key is exposed as "Default" to users)
+    Library.ThemePresets["Default"]  = TableClone(Themes["Preset"])
+    Library.ThemePresets["Midnight"] = TableClone(Themes["Midnight"])
+    Library.ThemePresets["Ember"]    = TableClone(Themes["Ember"])
 
     -- Folders
     for Index, Value in Library.Folders do 
@@ -1077,6 +1144,117 @@ local Library do
         return Start + (Finish - Start) * Time
     end
 
+    -- [Feature: Corner Radius] Register a UICorner instance so SetCornerRadius updates it later
+    Library.RegisterCorner = function(self, Corner, Type)
+        if not self.CornerItems[Type] then
+            self.CornerItems[Type] = { }
+        end
+        TableInsert(self.CornerItems[Type], Corner)
+        -- Apply current radius immediately
+        Corner.CornerRadius = UDimNew(0, self.CornerRadius[Type] or 0)
+    end
+
+    -- [Feature: Corner Radius] Update all registered corners of the given type
+    Library.SetCornerRadius = function(self, Type, Value)
+        local Min = (self.CornerRadiusDefaults and self.CornerRadiusDefaults[Type]) or 0
+        Value = MathClamp(Value, Min, 32)
+        self.CornerRadius[Type] = Value
+        if self.CornerItems[Type] then
+            for _, Corner in self.CornerItems[Type] do
+                if Corner and Corner.Parent then
+                    Corner.CornerRadius = UDimNew(0, Value)
+                end
+            end
+        end
+    end
+
+    -- [Feature: Theme Presets] Register a developer-defined colour preset
+    Library.RegisterThemePreset = function(self, Name, ColorTable)
+        self.ThemePresets[Name] = TableClone(ColorTable)
+    end
+
+    -- [Feature: Theme Presets] Apply a registered preset by name
+    Library.SetThemePreset = function(self, Name)
+        local Preset = self.ThemePresets[Name]
+        if not Preset then return end
+        self.ActivePreset = Name
+        for Key, Color in Preset do
+            self:ChangeTheme(Key, Color)
+        end
+    end
+
+    -- [Feature: Config Export] Serialise current theme colours to JSON
+    Library.GetThemeConfig = function(self)
+        local ThemeData = { }
+        for Key, Color in self.Theme do
+            ThemeData[Key] = "#" .. Color:ToHex()
+        end
+        return HttpService:JSONEncode(ThemeData)
+    end
+
+    -- [Feature: Config Export] Load theme colours from a JSON string
+    Library.LoadThemeConfig = function(self, JSON)
+        local Ok, Decoded = pcall(HttpService.JSONDecode, HttpService, JSON)
+        if not Ok or type(Decoded) ~= "table" then
+            return false, "Invalid JSON"
+        end
+        for Key, HexValue in Decoded do
+            if type(HexValue) == "string" and self.Theme[Key] then
+                local ColorOk, Color = pcall(FromHex, HexValue)
+                if ColorOk then
+                    self:ChangeTheme(Key, Color)
+                end
+            end
+        end
+        return true
+    end
+
+    -- [Feature: Folder Structure] Build per-hub per-game folder tree
+    Library.BuildFolderPaths = function(self, Title, DevName)
+        local function Sanitize(Str)
+            return StringGSub(tostring(Str or "Unknown"), "[^%w%-_]", "_")
+        end
+        local GameName = Sanitize(game.Name)
+        local GameId   = tostring(game.PlaceId)
+        local Hub      = StringFormat("Ady...%s_by...%s", Sanitize(Title), Sanitize(DevName))
+        local GameDir  = StringFormat("Ady...%s_ID%s", GameName, GameId)
+        local Root     = "Adytum_libraryfolder"
+        local HubPath  = Root .. "/" .. Hub
+        local GamePath = HubPath .. "/" .. GameDir
+
+        self.Folders = {
+            Directory = Root,
+            Hub       = HubPath,
+            Game      = GamePath,
+            Configs   = GamePath .. "/Configs",
+            Assets    = HubPath .. "/Assets",
+        }
+
+        local Paths = {
+            Root,
+            HubPath,
+            HubPath .. "/Assets",
+            GamePath,
+            GamePath .. "/Configs",
+        }
+        for _, Path in Paths do
+            if not isfolder(Path) then
+                makefolder(Path)
+            end
+        end
+
+        -- Re-copy assets to the hub Assets folder if not already there
+        for _, ImageData in self.Images do
+            local ImageName = tostring(ImageData[1])
+            local DestPath  = self.Folders.Assets .. "/" .. ImageName
+            if not isfile(DestPath) then
+                pcall(function()
+                    writefile(DestPath, game:HttpGet(ImageData[2]))
+                end)
+            end
+        end
+    end
+
     -- Components
     local Components = { } do
         Components.Window = function(self, Data)
@@ -1118,6 +1296,12 @@ local Library do
                 end
 
                 Items["UIStroke"] = Items["Window"]:Border("Outline")
+
+                -- [Feature: Corner Radius] Main window UICorner
+                local WinCorner = InstanceNew("UICorner")
+                WinCorner.Name = "\0"
+                WinCorner.Parent = Items["Window"].Instance
+                Library:RegisterCorner(WinCorner, "Window")
             end
 
             return Items
@@ -2011,6 +2195,12 @@ local Library do
                     LineJoinMode = Enum.LineJoinMode.Miter,
                     ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 }):AddToTheme({Color = "Outline"})
+
+                -- [Feature: Corner Radius] Slider track UICorner
+                local SliderCorner = InstanceNew("UICorner")
+                SliderCorner.Name = "\0"
+                SliderCorner.Parent = Items["RealSlider"].Instance
+                Library:RegisterCorner(SliderCorner, "Sliders")
 
                 Items["Accent"] = Instances:Create("Frame", {
                     Parent = Items["RealSlider"].Instance,
@@ -5371,18 +5561,43 @@ end)
             FadeTime = Data.FadeTime or Data.fadetime or 0.4,
             Size = Data.Size or Data.size or UDim2New(0, 751, 0, 539),
 
-            -- Resize limits: developer can pass MinSize/MaxSize (Vector2) when
-            -- creating the Window. If omitted, defaults to the library's
-            -- current behavior: minimum = initial window size, maximum =
-            -- effectively unbounded.
+            -- Resize limits
             MinSize = Data.MinSize or Data.minsize or nil,
             MaxSize = Data.MaxSize or Data.maxsize or nil,
+
+            -- [Feature: Title] Developer-supplied title
+            Title = Data.Title or Data.title or "",
+            DevName = Data.DevName or Data.devname or "Dev",
+            TitlePosition = Data.TitlePosition or Data.titleposition or "Topbar",
+
+            -- [Feature: Credits]
+            Credits = Data.Credits or Data.credits or { },
+
+            -- [Feature: Config Export] Per-window override
+            AllowConfigExport = (Data.AllowConfigExport ~= nil) and Data.AllowConfigExport
+                             or (Data.allowconfigexport ~= nil) and Data.allowconfigexport
+                             or Library.AllowConfigExport,
 
             Pages = { },
             Items = { },
 
             IsOpen = false,
+            IsMinimized = false,
         }
+
+        -- [Feature: Folder Structure] Build per-hub per-game directories when dev info is supplied
+        if Window.Title ~= "" or Window.DevName ~= "Dev" then
+            Library:BuildFolderPaths(
+                Window.Title ~= "" and Window.Title or "Script",
+                Window.DevName
+            )
+        end
+
+        -- Store window metadata in Library so CreateSettingsPage can access it
+        Library.TitleText        = Window.Title
+        Library.TitlePosition    = Window.TitlePosition
+        Library.Credits          = Window.Credits
+        Library.AllowConfigExport = Window.AllowConfigExport
 
         local Items = Components:Window({
             Parent = Library.Holder,
@@ -5397,9 +5612,9 @@ end)
             Items["Side"] = Instances:Create("Frame", {
                 Parent = Items["Window"].Instance,
                 Name = "\0",
-                Position = UDim2New(0, 12, 0, 12),
+                Position = UDim2New(0, 12, 0, 42),
                 BorderColor3 = FromRGB(16, 28, 44),
-                Size = UDim2New(0, 200, 1, -24),
+                Size = UDim2New(0, 200, 1, -54),
                 BorderSizePixel = 2,
                 BackgroundTransparency = 0.25,
                 BackgroundColor3 = FromRGB(12, 22, 36)
@@ -5408,6 +5623,136 @@ end)
             Items["Side"]:Border("Border")
 
             Items["Window"].Instance.Visible = false
+
+            -- ── [Feature: Topbar] ─────────────────────────────────────────────
+            -- Slim 30-px bar at the top of the window. Acts as:
+            --   • Secondary drag handle
+            --   • Title display area (when TitlePosition == "Topbar")
+            --   • Minimise toggle
+            Items["Topbar"] = Instances:Create("Frame", {
+                Parent = Items["Window"].Instance,
+                Name = "\0",
+                Position = UDim2New(0, 0, 0, 0),
+                Size = UDim2New(1, 0, 0, 30),
+                BorderSizePixel = 0,
+                ZIndex = 5,
+                BackgroundTransparency = 0.05,
+                BackgroundColor3 = FromRGB(6, 12, 20)
+            })  Items["Topbar"]:AddToTheme({BackgroundColor3 = "Background"})
+
+            -- Topbar bottom accent line
+            Items["TopbarLiner"] = Instances:Create("Frame", {
+                Parent = Items["Topbar"].Instance,
+                Name = "\0",
+                AnchorPoint = Vector2New(0, 1),
+                Position = UDim2New(0, 0, 1, 0),
+                Size = UDim2New(1, 0, 0, 1),
+                BorderSizePixel = 0,
+                ZIndex = 6,
+                BackgroundColor3 = FromRGB(58, 138, 224)
+            })  Items["TopbarLiner"]:AddToTheme({BackgroundColor3 = "Accent"})
+
+            -- Title label in the topbar
+            Items["TopbarTitle"] = Instances:Create("TextLabel", {
+                Parent = Items["Topbar"].Instance,
+                Name = "\0",
+                FontFace = Library.Font,
+                Text = Window.Title,
+                TextColor3 = FromRGB(222, 236, 248),
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                AnchorPoint = Vector2New(0, 0.5),
+                Position = UDim2New(0, 12, 0.5, 0),
+                Size = UDim2New(1, -60, 0, 16),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                ZIndex = 6,
+                TextSize = 11,
+                BackgroundColor3 = FromRGB(255, 255, 255),
+                Visible = Window.TitlePosition == "Topbar"
+            })  Items["TopbarTitle"]:AddToTheme({TextColor3 = "Text"})
+            Items["TopbarTitle"]:TextBorder()
+
+            -- Minimise button [—]
+            Items["MinimizeBtn"] = Instances:Create("TextButton", {
+                Parent = Items["Topbar"].Instance,
+                Name = "\0",
+                FontFace = Library.Font,
+                Text = "—",
+                TextColor3 = FromRGB(138, 160, 184),
+                AutoButtonColor = false,
+                AnchorPoint = Vector2New(1, 0.5),
+                Position = UDim2New(1, -8, 0.5, 0),
+                Size = UDim2New(0, 26, 0, 22),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                ZIndex = 6,
+                TextSize = 16,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })  Items["MinimizeBtn"]:AddToTheme({TextColor3 = "Placeholder Text"})
+            Items["MinimizeBtn"]:TextBorder()
+
+            -- Topbar as secondary drag handle (moves the parent window frame)
+            do
+                local WinGui = Items["Window"].Instance
+                local Dragging = false
+                local DragStart, StartPos
+
+                Items["Topbar"]:Connect("InputBegan", function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1
+                    or Input.UserInputType == Enum.UserInputType.Touch then
+                        Dragging  = true
+                        DragStart = Input.Position
+                        StartPos  = WinGui.Position
+                        Input.Changed:Connect(function()
+                            if Input.UserInputState == Enum.UserInputState.End then
+                                Dragging = false
+                            end
+                        end)
+                    end
+                end)
+
+                Library:Connect(UserInputService.InputChanged, function(Input)
+                    if Dragging and (Input.UserInputType == Enum.UserInputType.MouseMovement
+                    or Input.UserInputType == Enum.UserInputType.Touch) then
+                        local Delta = Input.Position - DragStart
+                        WinGui.Position = UDim2New(
+                            StartPos.X.Scale, StartPos.X.Offset + Delta.X,
+                            StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y
+                        )
+                    end
+                end)
+            end
+
+            -- Minimise / restore
+            do
+                local FullSize = Window.Size
+
+                Items["MinimizeBtn"]:Connect("MouseButton1Down", function()
+                    Window.IsMinimized = not Window.IsMinimized
+                    if Window.IsMinimized then
+                        Items["Window"].Instance:TweenSize(
+                            UDim2New(0, FullSize.X.Offset, 0, 30),
+                            Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.2, true
+                        )
+                        Items["MinimizeBtn"].Instance.Text = "□"
+                    else
+                        Items["Window"].Instance:TweenSize(
+                            FullSize,
+                            Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.2, true
+                        )
+                        Items["MinimizeBtn"].Instance.Text = "—"
+                    end
+                end)
+
+                Items["MinimizeBtn"]:OnHover(function()
+                    Items["MinimizeBtn"]:Tween(nil, {TextColor3 = Library.Theme.Accent})
+                end)
+                Items["MinimizeBtn"]:OnHoverLeave(function()
+                    Items["MinimizeBtn"]:Tween(nil, {TextColor3 = Library.Theme["Placeholder Text"]})
+                end)
+            end
+            -- ── end Topbar ────────────────────────────────────────────────────
 
             Items["Logo"] = Instances:Create("ImageLabel", {
                 Parent = Items["Side"].Instance,
@@ -5423,6 +5768,43 @@ end)
                 BorderSizePixel = 0,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["Logo"]:AddToTheme({ImageColor3 = "Accent"})
+
+            -- [Feature: Title] Title label rendered below the logo (TitlePosition == "Logo")
+            Items["LogoTitle"] = Instances:Create("TextLabel", {
+                Parent = Items["Side"].Instance,
+                Name = "\0",
+                FontFace = Library.Font,
+                Text = Window.Title,
+                TextColor3 = FromRGB(222, 236, 248),
+                AnchorPoint = Vector2New(0.5, 0),
+                Position = UDim2New(0.5, 0, 0, 92),
+                Size = UDim2New(1, -16, 0, 14),
+                BackgroundTransparency = 1,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                BorderSizePixel = 0,
+                TextSize = 10,
+                BackgroundColor3 = FromRGB(255, 255, 255),
+                Visible = Window.TitlePosition == "Logo"
+            })  Items["LogoTitle"]:AddToTheme({TextColor3 = "Text"})
+            Items["LogoTitle"]:TextBorder()
+
+            -- Helper called by Settings "Title Position" dropdown
+            local function ApplyTitlePosition(Position)
+                Library.TitlePosition = Position
+                if Position == "Topbar" then
+                    Items["TopbarTitle"].Instance.Visible = true
+                    Items["LogoTitle"].Instance.Visible   = false
+                elseif Position == "Logo" then
+                    Items["TopbarTitle"].Instance.Visible = false
+                    Items["LogoTitle"].Instance.Visible   = true
+                else  -- "None"
+                    Items["TopbarTitle"].Instance.Visible = false
+                    Items["LogoTitle"].Instance.Visible   = false
+                end
+            end
+            ApplyTitlePosition(Window.TitlePosition)
+            Window.ApplyTitlePosition = ApplyTitlePosition
 
             Items["Pages"] = Instances:Create("Frame", {
                 Parent = Items["Side"].Instance,
@@ -5528,9 +5910,9 @@ end)
                 Parent = Items["Window"].Instance,
                 Name = "\0",
                 BackgroundTransparency = 1,
-                Position = UDim2New(0, 226, 0, 12),
+                Position = UDim2New(0, 226, 0, 42),
                 BorderColor3 = FromRGB(0, 0, 0),
-                Size = UDim2New(1, -238, 1, -24),
+                Size = UDim2New(1, -238, 1, -54),
                 BorderSizePixel = 0,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })
@@ -5761,7 +6143,13 @@ end)
                 BackgroundColor3 = FromRGB(20, 24, 21)
             })  Items["Section"]:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
 
-            Items["Section"]:Border("Border")
+            Items[\"Section\"]:Border(\"Border\")
+
+            -- [Feature: Corner Radius] Section box UICorner
+            local BoxCorner = InstanceNew("UICorner")
+            BoxCorner.Name = "\0"
+            BoxCorner.Parent = Items["Section"].Instance
+            Library:RegisterCorner(BoxCorner, "Boxes")
 
             Items["Liner"] = Instances:Create("Frame", {
                 Parent = Items["Section"].Instance,
@@ -6229,6 +6617,26 @@ end)
         local SettingsPage = Window:Page({Name = "Settings", SubPages = true}) do 
             local ThemingSubPage = SettingsPage:SubPage({Name = "Theming", Columns = 2}) do 
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
+
+                    -- [Feature: Theme Presets] Preset picker (hidden when AllowThemePresets = false)
+                    if Library.AllowThemePresets then
+                        local PresetNames = { }
+                        for Name in Library.ThemePresets do
+                            TableInsert(PresetNames, Name)
+                        end
+                        ThemesSection:Dropdown({
+                            Name = "Preset",
+                            Flag = "ThemePreset",
+                            Items = PresetNames,
+                            Default = Library.ActivePreset,
+                            Callback = function(Value)
+                                if Value then
+                                    Library:SetThemePreset(Value)
+                                end
+                            end
+                        })
+                    end
+
                     for Index, Value in Library.Theme do 
                         ThemesSection:Label(Index):Colorpicker({
                             Name = Index,
@@ -6240,6 +6648,46 @@ end)
                             end
                         })
                     end
+                end
+
+                -- [Feature: Corner Radius] Three sliders on Side 2
+                local CornerSection = ThemingSubPage:Section({Name = "Corner Radius", Side = 2}) do
+                    CornerSection:Slider({
+                        Name = "Window Radius",
+                        Flag = "CornerWindow",
+                        Min = Library.CornerRadiusDefaults.Window,
+                        Max = 24,
+                        Decimals = 1,
+                        Suffix = "px",
+                        Default = Library.CornerRadius.Window,
+                        Callback = function(Value)
+                            Library:SetCornerRadius("Window", Value)
+                        end
+                    })
+                    CornerSection:Slider({
+                        Name = "Box Radius",
+                        Flag = "CornerBoxes",
+                        Min = Library.CornerRadiusDefaults.Boxes,
+                        Max = 12,
+                        Decimals = 1,
+                        Suffix = "px",
+                        Default = Library.CornerRadius.Boxes,
+                        Callback = function(Value)
+                            Library:SetCornerRadius("Boxes", Value)
+                        end
+                    })
+                    CornerSection:Slider({
+                        Name = "Slider Radius",
+                        Flag = "CornerSliders",
+                        Min = Library.CornerRadiusDefaults.Sliders,
+                        Max = 8,
+                        Decimals = 1,
+                        Suffix = "px",
+                        Default = Library.CornerRadius.Sliders,
+                        Callback = function(Value)
+                            Library:SetCornerRadius("Sliders", Value)
+                        end
+                    })
                 end
             end
 
@@ -6342,6 +6790,30 @@ end)
                     end)
 
                     Library:RefreshConfigsList(ConfigsSearchbox)
+
+                    -- [Feature: Config Export] Theme export/import (dev-togglable)
+                    if Library.AllowConfigExport then
+                        local ExportImportButton = ConfigsSection:Button()
+                        ExportImportButton:Add("Export Theme", function()
+                            local ThemeJson = Library:GetThemeConfig()
+                            local ExportPath = Library.Folders.Configs .. "/theme_export.json"
+                            writefile(ExportPath, ThemeJson)
+                            Library:Notification("Success", "Theme exported to theme_export.json", 5)
+                        end)
+                        ExportImportButton:Add("Import Theme", function()
+                            local ImportPath = Library.Folders.Configs .. "/theme_export.json"
+                            if isfile(ImportPath) then
+                                local Ok, Err = Library:LoadThemeConfig(readfile(ImportPath))
+                                if Ok then
+                                    Library:Notification("Success", "Theme imported successfully", 5)
+                                else
+                                    Library:Notification("Error", "Import failed: " .. tostring(Err), 5)
+                                end
+                            else
+                                Library:Notification("Error", "No theme_export.json found in Configs folder", 5)
+                            end
+                        end)
+                    end
                 end
             end
 
@@ -6364,6 +6836,24 @@ end)
 			                KeybindList:SetVisibility(Value)
 			            end
 			        })
+
+			        -- [Feature: Title] User can reposition or hide the window title
+			        if Library.TitleText ~= "" then
+			            local CurrentPos = Library.TitlePosition
+			            local PosMap = {Topbar = "Topbar", Logo = "Logo box", None = "None"}
+			            SettingsSection:Dropdown({
+			                Name = "Title Position",
+			                Flag = "TitlePosition",
+			                Items = {"Topbar", "Logo box", "None"},
+			                Default = PosMap[CurrentPos] or "Topbar",
+			                Callback = function(Value)
+			                    local Pos = Value == "Logo box" and "Logo" or Value
+			                    if Window and Window.ApplyTitlePosition then
+			                        Window:ApplyTitlePosition(Pos)
+			                    end
+			                end
+			            })
+			        end
 			
 			        SettingsSection:Slider({
 			            Name = "Fade time",
@@ -6444,6 +6934,24 @@ end)
 			        })
 			    end
 			end
+
+            -- [Feature: Credits] Always-last sub-page showing dev credits
+            local CreditsSubPage = SettingsPage:SubPage({Name = "Credits", Columns = 1}) do
+                local CreditsSection = CreditsSubPage:Section({Name = "Credits", Side = 1}) do
+                    if type(Library.Credits) == "table" then
+                        for _, Entry in Library.Credits do
+                            local EntryName = tostring(Entry.Name or Entry.name or "?")
+                            local EntryRole = tostring(Entry.Role or Entry.role or "")
+                            local Line = EntryRole ~= "" and (EntryName .. "  —  " .. EntryRole) or EntryName
+                            CreditsSection:Label(Line)
+                        end
+                    end
+                    if #Library.Credits > 0 then
+                        CreditsSection:Label("────────────────")
+                    end
+                    CreditsSection:Label("Built with Adytum Library")
+                end
+            end
         end
         
         return SettingsPage
