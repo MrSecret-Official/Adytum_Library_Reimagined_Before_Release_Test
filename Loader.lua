@@ -922,11 +922,26 @@ local Library do
 		return `<font color="rgb({MathFloor(Color.R * 255)}, {MathFloor(Color.G * 255)}, {MathFloor(Color.B * 255)})">{Text}</font>`
 	end
 
+    -- [Feature: Config Export] The Theming subpage registers a colorpicker
+    -- flag per theme colour (e.g. "AccentTheme", "GradientTheme") plus a
+    -- "ThemePreset" dropdown flag, all in the same global Library.Flags
+    -- table as every other feature flag (toggles/sliders/etc). Those two
+    -- patterns are theme state, not user-selected feature config, so they
+    -- must be excluded here or Export/Import Config ends up dumping (and
+    -- overwriting) the theme instead of the actual saved selections.
+    Library.IsThemeFlag = function(self, Index)
+        return Index == "ThemePreset" or (type(Index) == "string" and StringFind(Index, "Theme$") ~= nil)
+    end
+
     Library.GetConfig = function(self)
         local Config = { } 
 
         local Success, Result = Library:SafeCall(function()
             for Index, Value in Library.Flags do 
+                if Library:IsThemeFlag(Index) then
+                    continue
+                end
+
                 if type(Value) == "table" and Value.Key then
                     Config[Index] = {Key = tostring(Value.Key), Mode = Value.Mode}
                 elseif type(Value) == "table" and Value.Color then
@@ -945,6 +960,10 @@ local Library do
 
         local Success, Result = Library:SafeCall(function()
             for Index, Value in Decoded do 
+                if Library:IsThemeFlag(Index) then
+                    continue
+                end
+
                 local SetFunction = Library.SetFlags[Index]
 
                 if not SetFunction then
@@ -1491,6 +1510,12 @@ local Library do
                     Size = UDim2New(1, 0, 0, 25),
                     BorderSizePixel = 2,
                     TextSize = 14,
+                    -- [Feature: Settings Always Last] LayoutOrder drives the
+                    -- side button's position in the tab list (see
+                    -- Library.Page below); the Settings tab is always given
+                    -- the max int32 order so it sorts after every other page
+                    -- no matter what order pages are created/deferred in.
+                    LayoutOrder = Data.LayoutOrder or 0,
                     BackgroundColor3 = FromRGB(25, 30, 26)
                 })  Items["Inactive"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Border"})
 
@@ -6357,6 +6382,19 @@ end)
             SubPagesMode = Data.SubPagesMode or Data.subpagesmode or "Auto",
         }
 
+        -- [Feature: Settings Always Last] Side buttons sort by LayoutOrder
+        -- (see Components.WindowPage), so every page created here gets an
+        -- incrementing order matching creation order -- except the mandatory
+        -- Settings page (CreateSettingsPage passes PinLast = true below),
+        -- which always gets the max int32 instead (LayoutOrder is a 32-bit
+        -- int property, so math.huge/inf isn't valid here). This keeps
+        -- Settings visually pinned to the bottom of the side buttons even
+        -- though it's actually created via task.defer, regardless of how
+        -- many pages/subpages the calling script adds, and in whatever
+        -- order/timing it adds them.
+        self.PageOrderCounter = (self.PageOrderCounter or 0) + 1
+        local LayoutOrder = Data.PinLast and 2147483647 or self.PageOrderCounter
+
         Library.SearchItems[Page] = { }
 
         local NewPage, Items = Components:WindowPage({
@@ -6368,7 +6406,8 @@ end)
             SubPages = Page.SubPages,
             SubPagesMode = Page.SubPagesMode,
             FadeTime = Page.Window.FadeTime,
-            Window = Page.Window
+            Window = Page.Window,
+            LayoutOrder = LayoutOrder
         })
 
         return setmetatable(NewPage, Library.Pages)
@@ -6892,7 +6931,7 @@ end)
     end
 
     Library.CreateSettingsPage = function(self, Window, Watermark, KeybindList)
-        local SettingsPage = Window:Page({Name = "Settings", SubPages = true}) do 
+        local SettingsPage = Window:Page({Name = "Settings", SubPages = true, PinLast = true}) do 
             local ThemingSubPage = SettingsPage:SubPage({Name = "Theming", Columns = 2}) do 
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
 
@@ -6935,6 +6974,55 @@ end)
                                 Library:ChangeTheme(Index, Value)
                             end
                         })
+                    end
+                end
+
+                -- [Feature: Theme Export] Export/Import of the current theme
+                -- colours (as opposed to Export/Import Config below, which
+                -- covers feature flags/selections). Lives in its own
+                -- persistent Section (Side 2), same treatment as the
+                -- Configs subpage's Export/Import Config Section.
+                if Library.AllowConfigExport then
+                    local ExportImportThemeSection = ThemingSubPage:Section({Name = "Export / Import Theme", Side = 2}) do
+                        local ThemeBox = Library:BuildExportImportBox(ExportImportThemeSection.Items["Content"].Instance)
+
+                        local ThemeExportButton = ExportImportThemeSection:Button()
+
+                        ThemeExportButton:Add("Export", function()
+                            ThemeBox:SetText(Library:GetThemeConfig())
+                            Library:Notification("Success", "Exported current theme below", 3)
+                        end)
+
+                        ThemeExportButton:Add("Copy", function()
+                            if setclipboard then
+                                pcall(setclipboard, ThemeBox:GetText())
+                                Library:Notification("Success", "Theme copied to clipboard", 3)
+                            else
+                                Library:Notification("Error", "Your executor doesn't support setclipboard", 3)
+                            end
+                        end)
+
+                        local ThemeImportClearButton = ExportImportThemeSection:Button()
+
+                        ThemeImportClearButton:Add("Import", function()
+                            local Text = ThemeBox:GetText()
+
+                            if Text == nil or Text == "" then
+                                Library:Notification("Error", "Please paste a theme first", 5)
+                                return
+                            end
+
+                            local Ok, Err = Library:LoadThemeConfig(Text)
+                            if Ok then
+                                Library:Notification("Success", "Theme imported successfully", 5)
+                            else
+                                Library:Notification("Error", "Import failed: " .. tostring(Err), 5)
+                            end
+                        end)
+
+                        ThemeImportClearButton:Add("Clear", function()
+                            ThemeBox:SetText("")
+                        end)
                     end
                 end
 
@@ -7068,25 +7156,23 @@ end)
                 -- persistent Section (Side 2) instead of a show/hide
                 -- dropdown-style popup, matching the config list/buttons
                 -- Section right next to it.
+                -- [Feature: Config Export] Export/Import of the script's current,
+                -- live selections (toggles/sliders/dropdowns/etc, same data as
+                -- Save/Load) -- not the theme colours, which have their own
+                -- identical-looking Section on the Theming subpage instead.
+                -- Duplicated from that Theming section, but wired to
+                -- GetConfig/LoadConfig so Export always dumps whatever is
+                -- currently set (no saved file needs to be selected first)
+                -- and Import never touches theme flags (see IsThemeFlag).
                 if Library.AllowConfigExport then
                     local ExportImportSection = ConfigsSubPage:Section({Name = "Export / Import Config", Side = 2}) do
                         local ConfigBox = Library:BuildExportImportBox(ExportImportSection.Items["Content"].Instance)
 
                         local ExportButton = ExportImportSection:Button()
 
-                        local ExportActionButton = ExportButton:Add("Export", function()
-                            if not ConfigSelected then
-                                return
-                            end
-
-                            local Success, Result = pcall(readfile, Library.Folders.Configs .. "/" .. ConfigSelected)
-
-                            if Success then
-                                ConfigBox:SetText(Result)
-                                Library:Notification("Success", "Exported config "..ConfigSelected:gsub("%.json$", "").." below", 3)
-                            else
-                                Library:Notification("Error", "Failed to read config "..ConfigSelected, 5)
-                            end
+                        ExportButton:Add("Export", function()
+                            ConfigBox:SetText(Library:GetConfig())
+                            Library:Notification("Success", "Exported current config below", 3)
                         end)
 
                         ExportButton:Add("Copy", function()
@@ -7119,23 +7205,6 @@ end)
                         ImportClearButton:Add("Clear", function()
                             ConfigBox:SetText("")
                         end)
-
-                        -- Same selection-gated greying as Delete/Load/Autoload,
-                        -- plus a label swap since "Export" doesn't make sense
-                        -- to leave up when there's nothing selected to export.
-                        local function UpdateExportButton()
-                            local HasSelection = ConfigSelected ~= nil and ConfigSelected ~= ""
-                            ExportActionButton:SetEnabled(HasSelection)
-                            ExportActionButton:SetText(HasSelection and "Export" or "No config selected")
-                        end
-
-                        UpdateExportButton()
-
-                        local PreviousUpdateSelectionDependentButtons = UpdateSelectionDependentButtons
-                        UpdateSelectionDependentButtons = function()
-                            PreviousUpdateSelectionDependentButtons()
-                            UpdateExportButton()
-                        end
                     end
                 end
             end
