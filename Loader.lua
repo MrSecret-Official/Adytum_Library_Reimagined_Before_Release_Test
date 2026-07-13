@@ -7185,6 +7185,41 @@ end)
                 -- with (and above) ExportImportThemeSection on the right.
                 -- Only create/delete/save/load/autoload are available in
                 -- advanced mode per spec.
+                -- ── RIGHT COLUMN ───────────────────────────────────────────
+
+                -- [Feature: Theme Colors] Per-colour colorpickers on Side=2
+                -- (right column). Created FIRST on Side=2 so they appear at
+                -- the top of the right column, above ExportImportThemeSection.
+                -- Each callback flips the preset dropdown to "Custom" and
+                -- auto-saves in real time.
+                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 2}) do
+                    for Index, Value in Library.Theme do 
+                        ColorsSection:Label(Index):Colorpicker({
+                            Name = Index,
+                            Flag = Index.."Theme",
+                            Default = Value,
+                            Callback = function(Value)
+                                -- Suppressed during batch refresh (preset switch
+                                -- or autoload) so we don't re-flip to "Custom".
+                                if Library._SuppressThemeCallbacks then return end
+
+                                Library.Theme[Index] = Value
+                                Library:ChangeTheme(Index, Value)
+
+                                -- [Feature: Custom Theme] Any manual recolor
+                                -- flips the preset dropdown to "Custom" and
+                                -- persists the full theme in real time.
+                                Library.ActivePreset = "Custom"
+                                if PresetDropdown then
+                                    PresetDropdown:Set("Custom")
+                                end
+                                Library:SaveActivePreset("Custom")
+                                Library:SaveActiveTheme()
+                            end
+                        })
+                    end
+                end
+
                 if Library.AllowAdvancedTheming then
                     local ThemeSelected
                     local ThemeName
@@ -7309,51 +7344,27 @@ end)
                         Library:RefreshThemesList(ThemesSearchbox)
                     end
                     TableInsert(AdvancedThemingSections, ThemesListSection)
-                end
 
-                -- ── RIGHT COLUMN ───────────────────────────────────────────
+                    -- [Feature: Theme Export] Export/Import of the current theme
+                    -- colours. Lives on Side=2 (RIGHT column), BELOW ColorsSection
+                    -- (which was created first on Side=2 above). Mirrors the Config
+                    -- export/import pattern: the "Import as" textbox saves the pasted
+                    -- JSON to disk so it appears in the Saved Themes list immediately.
+                    -- ThemesSearchbox is in scope since both sections share the
+                    -- same AllowAdvancedTheming block.
+                    local ImportThemeName
 
-                -- [Feature: Theme Colors] Per-colour colorpickers on Side=2
-                -- (right column) so they don't push the themes list down on
-                -- the left. Each colorpicker callback flips the preset
-                -- dropdown to "Custom" and auto-saves in real time.
-                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 2}) do
-                    for Index, Value in Library.Theme do 
-                        ColorsSection:Label(Index):Colorpicker({
-                            Name = Index,
-                            Flag = Index.."Theme",
-                            Default = Value,
+                    local ExportImportThemeSection = ThemingSubPage:Section({Name = "Export / Import Theme", Side = 2}) do
+                        ExportImportThemeSection:Textbox({
+                            Name = "Import as",
+                            Default = "",
+                            Flag = "ImportThemeName",
+                            Placeholder = "Enter a name for the imported theme",
                             Callback = function(Value)
-                                -- Suppressed during batch refresh (preset switch
-                                -- or autoload) so we don't re-flip to "Custom".
-                                if Library._SuppressThemeCallbacks then return end
-
-                                Library.Theme[Index] = Value
-                                Library:ChangeTheme(Index, Value)
-
-                                -- [Feature: Custom Theme] Any manual recolor
-                                -- flips the preset dropdown to "Custom" and
-                                -- persists the full theme in real time (no
-                                -- manual save step), the same auto-save
-                                -- treatment picking a registered preset gets.
-                                Library.ActivePreset = "Custom"
-                                if PresetDropdown then
-                                    PresetDropdown:Set("Custom")
-                                end
-                                Library:SaveActivePreset("Custom")
-                                Library:SaveActiveTheme()
+                                ImportThemeName = Value
                             end
                         })
-                    end
-                end
 
-                if Library.AllowAdvancedTheming then
-                    -- [Feature: Theme Export] Export/Import of the current theme
-                    -- colours (as opposed to Export/Import Config below, which
-                    -- covers feature flags/selections). Lives in its own
-                    -- persistent Section (Side=2 RIGHT column), below the
-                    -- ColorsSection colorpickers.
-                    local ExportImportThemeSection = ThemingSubPage:Section({Name = "Export / Import Theme", Side = 2}) do
                         local ThemeBox = Library:BuildExportImportBox(ExportImportThemeSection.Items["Content"].Instance)
 
                         local ThemeExportButton = ExportImportThemeSection:Button()
@@ -7382,12 +7393,29 @@ end)
                                 return
                             end
 
-                            local Ok, Err = Library:LoadThemeConfig(Text)
-                            if Ok then
-                                Library:Notification("Success", "Theme imported successfully", 5)
-                            else
-                                Library:Notification("Error", "Import failed: " .. tostring(Err), 5)
+                            if not ImportThemeName or ImportThemeName == "" then
+                                Library:Notification("Error", "Please enter a name for the imported theme", 5)
+                                return
                             end
+
+                            -- Validate JSON before touching disk
+                            local DecodeOk = pcall(HttpService.JSONDecode, HttpService, Text)
+                            if not DecodeOk then
+                                Library:Notification("Error", "Import failed: pasted text isn't valid JSON", 5)
+                                return
+                            end
+
+                            local FileName = ImportThemeName .. ".json"
+
+                            if isfile(Library.Folders.Themes .. "/" .. FileName) then
+                                Library:Notification("Error", "Theme with the name " .. ImportThemeName .. " already exists", 5)
+                                return
+                            end
+
+                            writefile(Library.Folders.Themes .. "/" .. FileName, Text)
+                            Library:Notification("Success", "Imported theme " .. ImportThemeName .. " successfully", 5)
+                            -- ThemesSearchbox is in scope: refresh the list immediately
+                            Library:RefreshThemesList(ThemesSearchbox)
                         end)
 
                         ThemeImportClearButton:Add("Clear", function()
