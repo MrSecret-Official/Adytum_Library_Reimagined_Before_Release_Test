@@ -1510,7 +1510,7 @@ local Library do
                         Size = UDim2New(1, 0, 0, 35),
                         BorderColor3 = FromRGB(42, 49, 45),
                         BorderSizePixel = 2,
-                        AutomaticCanvasSize = Enum.AutomaticCanvasSize.X,
+                        AutomaticCanvasSize = Enum.AutomaticSize.X,
                         CanvasSize = UDim2New(0, 0, 0, 0),
                         ScrollingDirection = Enum.ScrollingDirection.X,
                         ScrollBarThickness = 3,
@@ -1645,9 +1645,14 @@ local Library do
                     end
                 end
 
-                Library:Connect(NewTween.Tween.Completed, function()
+                if NewTween then
+                    Library:Connect(NewTween.Tween.Completed, function()
+                        Debounce = false
+                    end)
+                else
                     Debounce = false
-                end)
+                    Library:Notification("Warning", "Skipped a page transition animation (no tweenable elements found).", 3)
+                end
             end
 
             Items["Inactive"]:Connect("MouseButton1Down", function()
@@ -1880,9 +1885,14 @@ local Library do
                     end
                 end
 
-                Library:Connect(NewTween.Tween.Completed, function()
+                if NewTween then
+                    Library:Connect(NewTween.Tween.Completed, function()
+                        Debounce = false
+                    end)
+                else
                     Debounce = false
-                end)
+                    Library:Notification("Warning", "Skipped a page transition animation (no tweenable elements found).", 3)
+                end
             end
 
             Items["Inactive"]:Connect("MouseButton1Down", function()
@@ -2720,12 +2730,17 @@ local Library do
                     end
                 end
                 
-                NewTween.Tween.Completed:Connect(function()
-                    Debounce = false 
-                    Items["OptionHolder"].Instance.Visible = Dropdown.IsOpen
-                    task.wait(0.2)
-                    Items["OptionHolder"].Instance.Parent = not Dropdown.IsOpen and Library.UnusedHolder.Instance or Library.Holder.Instance
+                if NewTween then
+                    NewTween.Tween.Completed:Connect(function()
+                        Debounce = false 
+                        Items["OptionHolder"].Instance.Visible = Dropdown.IsOpen
+                        task.wait(0.2)
+                        Items["OptionHolder"].Instance.Parent = not Dropdown.IsOpen and Library.UnusedHolder.Instance or Library.Holder.Instance
                 end)
+                else
+                    Debounce = false
+                    Library:Notification("Warning", "Skipped an animation (no tweenable elements found).", 3)
+                end
             end
 
             function Dropdown:SetVisibility(Bool)
@@ -3880,12 +3895,17 @@ local Library do
                     end
                 end
                 
-                NewTween.Tween.Completed:Connect(function()
-                    Debounce = false 
-                    Items["ColorpickerWindow"].Instance.Visible = Colorpicker.IsOpen
-                    task.wait(0.2)
-                    Items["ColorpickerWindow"].Instance.Parent = not Colorpicker.IsOpen and Library.UnusedHolder.Instance or Library.Holder.Instance
+                if NewTween then
+                    NewTween.Tween.Completed:Connect(function()
+                        Debounce = false 
+                        Items["ColorpickerWindow"].Instance.Visible = Colorpicker.IsOpen
+                        task.wait(0.2)
+                        Items["ColorpickerWindow"].Instance.Parent = not Colorpicker.IsOpen and Library.UnusedHolder.Instance or Library.Holder.Instance
                 end)
+                else
+                    Debounce = false
+                    Library:Notification("Warning", "Skipped an animation (no tweenable elements found).", 3)
+                end
             end
 
             UpdateSync = function(Bool)
@@ -4397,12 +4417,17 @@ local Library do
                     end
                 end
                 
-                NewTween.Tween.Completed:Connect(function()
-                    Debounce = false 
-                    Items["KeybindWindow"].Instance.Visible = Keybind.IsOpen
-                    task.wait(0.2)
-                    Items["KeybindWindow"].Instance.Parent = not Keybind.IsOpen and Library.UnusedHolder.Instance or Library.Holder.Instance
+                if NewTween then
+                    NewTween.Tween.Completed:Connect(function()
+                        Debounce = false 
+                        Items["KeybindWindow"].Instance.Visible = Keybind.IsOpen
+                        task.wait(0.2)
+                        Items["KeybindWindow"].Instance.Parent = not Keybind.IsOpen and Library.UnusedHolder.Instance or Library.Holder.Instance
                 end)
+                else
+                    Debounce = false
+                    Library:Notification("Warning", "Skipped an animation (no tweenable elements found).", 3)
+                end
             end
 
             function Keybind:SetMode(Mode)
@@ -6149,17 +6174,22 @@ end)
                 end
             end
             
-            NewTween.Tween.Completed:Connect(function()
-                Debounce = false 
-                Items["Window"].Instance.Visible = Window.IsOpen
-                if Window.IsOpen then
-                    Items["MouseBackground"].Instance.Visible = true
-                    UserInputService.MouseIconEnabled = false
-                else
-                    Items["MouseBackground"].Instance.Visible = false
-                    UserInputService.MouseIconEnabled = true
-                end
+            if NewTween then
+                NewTween.Tween.Completed:Connect(function()
+                    Debounce = false 
+                    Items["Window"].Instance.Visible = Window.IsOpen
+                    if Window.IsOpen then
+                        Items["MouseBackground"].Instance.Visible = true
+                        UserInputService.MouseIconEnabled = false
+                    else
+                        Items["MouseBackground"].Instance.Visible = false
+                        UserInputService.MouseIconEnabled = true
+                    end
             end)
+            else
+                Debounce = false
+                Library:Notification("Warning", "Skipped an animation (no tweenable elements found).", 3)
+            end
         end
 
         Library:Connect(UserInputService.InputBegan, function(Input)
