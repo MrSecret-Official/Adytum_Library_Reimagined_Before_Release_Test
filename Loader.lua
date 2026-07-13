@@ -1078,6 +1078,148 @@ local Library do
         end
     end
 
+    -- [Feature: Config Export/Import] Shared paste/copy box used by the
+    -- "Export Config" / "Import Config" buttons. Mode "Export" pre-fills the
+    -- box with the given text and shows a Copy button; Mode "Import" shows an
+    -- empty placeholder box and an Import button that hands the pasted text
+    -- back to Callback(Text).
+    Library.OpenConfigBox = function(self, Title, Mode, PresetText, Callback)
+        local Overlay = Instances:Create("Frame", {
+            Parent = Library.Holder,
+            Name = "\0",
+            Size = UDim2New(1, 0, 1, 0),
+            Position = UDim2New(0, 0, 0, 0),
+            BackgroundColor3 = FromRGB(0, 0, 0),
+            BackgroundTransparency = 0.4,
+            BorderSizePixel = 0,
+            ZIndex = 1000
+        })
+
+        local Box = Instances:Create("Frame", {
+            Parent = Overlay.Instance,
+            Name = "\0",
+            AnchorPoint = Vector2New(0.5, 0.5),
+            Position = UDim2New(0.5, 0, 0.5, 0),
+            Size = UDim2New(0, 360, 0, 260),
+            BorderSizePixel = 2,
+            BorderColor3 = FromRGB(12, 12, 12),
+            BackgroundColor3 = FromRGB(6, 12, 20),
+            ZIndex = 1001
+        })  Box:AddToTheme({BackgroundColor3 = "Background", BorderColor3 = "Border"})
+        Box:Border("Border")
+
+        local BoxCorner = InstanceNew("UICorner")
+        BoxCorner.Name = "\0"
+        BoxCorner.CornerRadius = UDimNew(0, 6)
+        BoxCorner.Parent = Box.Instance
+
+        local TitleLabel = Instances:Create("TextLabel", {
+            Parent = Box.Instance,
+            Name = "\0",
+            FontFace = Library.Font,
+            Text = Title,
+            TextColor3 = FromRGB(222, 236, 248),
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Position = UDim2New(0, 12, 0, 10),
+            Size = UDim2New(1, -24, 0, 18),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            TextSize = 13,
+            ZIndex = 1002
+        })  TitleLabel:AddToTheme({TextColor3 = "Text"})
+        TitleLabel:TextBorder()
+
+        local CloseButton = Instances:Create("TextButton", {
+            Parent = Box.Instance,
+            Name = "\0",
+            FontFace = Library.Font,
+            Text = "X",
+            AutoButtonColor = false,
+            TextColor3 = FromRGB(138, 160, 184),
+            AnchorPoint = Vector2New(1, 0),
+            Position = UDim2New(1, -8, 0, 8),
+            Size = UDim2New(0, 22, 0, 22),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            TextSize = 14,
+            ZIndex = 1002
+        })  CloseButton:AddToTheme({TextColor3 = "Placeholder Text"})
+
+        local InputBackground = Instances:Create("Frame", {
+            Parent = Box.Instance,
+            Name = "\0",
+            Position = UDim2New(0, 12, 0, 36),
+            Size = UDim2New(1, -24, 1, -84),
+            BorderSizePixel = 2,
+            BorderColor3 = FromRGB(12, 12, 12),
+            BackgroundColor3 = FromRGB(12, 22, 36),
+            ZIndex = 1002
+        })  InputBackground:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
+
+        local InputBox = Instances:Create("TextBox", {
+            Parent = InputBackground.Instance,
+            Name = "\0",
+            FontFace = Library.Font,
+            Text = PresetText or "",
+            PlaceholderText = Mode == "Import" and "Paste your config here..." or "",
+            MultiLine = true,
+            ClearTextOnFocus = false,
+            TextEditable = Mode == "Import",
+            TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            TextColor3 = FromRGB(222, 236, 248),
+            PlaceholderColor3 = FromRGB(138, 160, 184),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Position = UDim2New(0, 8, 0, 6),
+            Size = UDim2New(1, -16, 1, -12),
+            TextSize = 11,
+            ZIndex = 1003
+        })  InputBox:AddToTheme({TextColor3 = "Text"})
+
+        local ActionButton = Instances:Create("TextButton", {
+            Parent = Box.Instance,
+            Name = "\0",
+            FontFace = Library.Font,
+            AutoButtonColor = false,
+            Text = Mode == "Import" and "Import" or "Copy",
+            TextColor3 = FromRGB(222, 236, 248),
+            AnchorPoint = Vector2New(0, 1),
+            Position = UDim2New(0, 12, 1, -12),
+            Size = UDim2New(1, -24, 0, 28),
+            BorderSizePixel = 2,
+            BorderColor3 = FromRGB(12, 12, 12),
+            BackgroundColor3 = FromRGB(58, 138, 224),
+            TextSize = 12,
+            ZIndex = 1002
+        })  ActionButton:AddToTheme({BackgroundColor3 = "Accent", BorderColor3 = "Border"})
+
+        local function Destroy()
+            Overlay.Instance:Destroy()
+        end
+
+        CloseButton:Connect("MouseButton1Click", Destroy)
+
+        ActionButton:Connect("MouseButton1Click", function()
+            if Mode == "Import" then
+                if Callback then
+                    Callback(InputBox.Instance.Text)
+                end
+                Destroy()
+            else
+                if setclipboard then
+                    pcall(setclipboard, InputBox.Instance.Text)
+                    Library:Notification("Success", "Config copied to clipboard", 3)
+                else
+                    Library:Notification("Error", "Your executor doesn't support setclipboard", 3)
+                end
+            end
+        end)
+
+        return Overlay
+    end
+
     Library.RefreshConfigsList = function(self, Element)
         local CurrentList = { }
         local List = { }
@@ -1267,6 +1409,7 @@ local Library do
                     BorderColor3 = FromRGB(12, 12, 12),
                     Size = Data.Size,
                     BorderSizePixel = 2,
+                    ClipsDescendants = true,
                     BackgroundTransparency = 0.12,
                     BackgroundColor3 = FromRGB(6, 12, 20)
                 })  Items["Window"]:AddToTheme({BackgroundColor3 = "Background", BorderColor3 = "Border"})
@@ -6143,7 +6286,7 @@ end)
                 BackgroundColor3 = FromRGB(20, 24, 21)
             })  Items["Section"]:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
 
-            Items["Section"]:Border("Border")
+            Items[\"Section\"]:Border(\"Border\")
 
             -- [Feature: Corner Radius] Section box UICorner
             local BoxCorner = InstanceNew("UICorner")
@@ -6650,45 +6793,6 @@ end)
                     end
                 end
 
-                -- [Feature: Corner Radius] Three sliders on Side 2
-                local CornerSection = ThemingSubPage:Section({Name = "Corner Radius", Side = 2}) do
-                    CornerSection:Slider({
-                        Name = "Window Radius",
-                        Flag = "CornerWindow",
-                        Min = Library.CornerRadiusDefaults.Window,
-                        Max = 24,
-                        Decimals = 1,
-                        Suffix = "px",
-                        Default = Library.CornerRadius.Window,
-                        Callback = function(Value)
-                            Library:SetCornerRadius("Window", Value)
-                        end
-                    })
-                    CornerSection:Slider({
-                        Name = "Box Radius",
-                        Flag = "CornerBoxes",
-                        Min = Library.CornerRadiusDefaults.Boxes,
-                        Max = 12,
-                        Decimals = 1,
-                        Suffix = "px",
-                        Default = Library.CornerRadius.Boxes,
-                        Callback = function(Value)
-                            Library:SetCornerRadius("Boxes", Value)
-                        end
-                    })
-                    CornerSection:Slider({
-                        Name = "Slider Radius",
-                        Flag = "CornerSliders",
-                        Min = Library.CornerRadiusDefaults.Sliders,
-                        Max = 8,
-                        Decimals = 1,
-                        Suffix = "px",
-                        Default = Library.CornerRadius.Sliders,
-                        Callback = function(Value)
-                            Library:SetCornerRadius("Sliders", Value)
-                        end
-                    })
-                end
             end
 
             local ConfigsSubPage = SettingsPage:SubPage({Name = "Configs", Columns = 2}) do 
@@ -6953,7 +7057,28 @@ end)
                 end
             end
         end
-        
+
+        -- [Feature: Autoload] Load whichever config is tagged "[AT] " on startup.
+        -- This must run after every Flag-registering component (both the
+        -- caller's pages/sections and this Settings page) has been built,
+        -- since LoadConfig applies values through Library.SetFlags.
+        if Library.Folders and Library.Folders.Configs and isfolder(Library.Folders.Configs) then
+            for _, Path in ipairs(listfiles(Library.Folders.Configs)) do
+                local FileName = string.match(Path, "([^/\\]+)$")
+                if FileName and FileName:match("^%[AT%]") then
+                    local Ok = Library:LoadConfig(readfile(Path))
+
+                    if Ok then
+                        Library:Notification("Autoload", "Loaded autoload config " .. FileName:gsub("%.json$", ""), 5)
+                    else
+                        Library:Notification("Error", "Failed to autoload config " .. FileName:gsub("%.json$", ""), 5)
+                    end
+
+                    break
+                end
+            end
+        end
+
         return SettingsPage
     end
 end
