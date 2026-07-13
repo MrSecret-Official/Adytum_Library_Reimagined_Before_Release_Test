@@ -7160,7 +7160,7 @@ end)
                 -- Colors section: per-colour colorpickers on Side=1 (LEFT),
                 -- directly below ThemesSection. Always visible (not advanced-gated).
                 -- Each callback flips the preset dropdown to "Custom" in real time.
-                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 2}) do
+                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 1}) do
                     for Index, Value in Library.Theme do
                         ColorsSection:Label(Index):Colorpicker({
                             Name = Index,
@@ -7194,7 +7194,7 @@ end)
                     local ThemesSearchbox
 
                     -- Saved Themes CRUD list: Side=2 (RIGHT column, top).
-                    local ThemesListSection = ThemingSubPage:Section({Name = "Saved Themes", Side = 1}) do
+                    local ThemesListSection = ThemingSubPage:Section({Name = "Saved Themes", Side = 2}) do
                         ThemesSearchbox = ThemesListSection:Searchbox({
                             Name = "SearchboxThemes",
                             Flag = "ThemesSearchbox",
