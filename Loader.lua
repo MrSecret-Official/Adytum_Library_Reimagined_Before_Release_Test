@@ -77,6 +77,7 @@ local Library do
         Folders = {
             Directory = "Adytum_libraryfolder",
             Configs   = "Adytum_libraryfolder/Configs",
+            Themes    = "Adytum_libraryfolder/Themes",
             Assets    = "Adytum_libraryfolder/Assets",
         },
 
@@ -125,6 +126,12 @@ local Library do
 
         -- [Feature: Config Export] Toggle export/import buttons in settings
         AllowConfigExport = true,   -- dev sets false to disable
+
+        -- [Feature: Advanced Theming] Toggle the "Advanced Mode" switch in
+        -- Theming that reveals theme export/import + a saved-themes list
+        -- (mirrors the Configs subpage). Dev sets false to hide the switch
+        -- and this whole feature from users entirely.
+        AllowAdvancedTheming = true,   -- dev sets false to disable
 
         -- [Feature: Corner Radius] Per-type corner radius values and registry
         CornerRadius = {
@@ -992,6 +999,70 @@ local Library do
         end
     end
 
+    -- [Feature: Theme Files] Themes subpage counterpart to DeleteConfig
+    Library.DeleteTheme = function(self, ThemeFile)
+        if isfile(Library.Folders.Themes .. "/" .. ThemeFile) then
+            delfile(Library.Folders.Themes .. "/" .. ThemeFile)
+        end
+    end
+
+    -- [Feature: Single Autoload] Marks Target as the "[AT] " autoload file
+    -- inside Folder, stripping the "[AT] " prefix off every other file in
+    -- that same folder first so there is never more than one autoload
+    -- config/theme at a time. Returns the (possibly renamed) new filename.
+    Library.SetAutoload = function(self, Folder, Target)
+        for _, Path in ipairs(listfiles(Folder)) do
+            local FileName = string.match(Path, "([^/\\]+)$")
+            if FileName and FileName ~= Target and FileName:match("^%[AT%]") then
+                local CleanName = FileName:gsub("^%[AT%]%s*", "")
+                local OldPath = Folder .. "/" .. FileName
+                local NewPath = Folder .. "/" .. CleanName
+                if not isfile(NewPath) then
+                    writefile(NewPath, readfile(OldPath))
+                    pcall(function() delfile(OldPath) end)
+                end
+            end
+        end
+
+        local OldPath = Folder .. "/" .. Target
+        if not isfile(OldPath) then
+            return Target
+        end
+
+        local CleanName = Target:gsub("^%[AT%]%s*", "")
+        local NewName = "[AT] " .. CleanName
+        local NewPath = Folder .. "/" .. NewName
+
+        if Target ~= NewName then
+            writefile(NewPath, readfile(OldPath))
+            pcall(function() delfile(OldPath) end)
+        end
+
+        return NewName
+    end
+
+    -- [Feature: Single Autoload] Strips the "[AT] " prefix off Target inside
+    -- Folder, i.e. undoes SetAutoload without marking anything else as the
+    -- new autoload. Returns the (possibly renamed) new filename.
+    Library.RemoveAutoload = function(self, Folder, Target)
+        local OldPath = Folder .. "/" .. Target
+        if not isfile(OldPath) then
+            return Target
+        end
+
+        if not Target:match("^%[AT%]") then
+            return Target
+        end
+
+        local CleanName = Target:gsub("^%[AT%]%s*", "")
+        local NewPath = Folder .. "/" .. CleanName
+
+        writefile(NewPath, readfile(OldPath))
+        pcall(function() delfile(OldPath) end)
+
+        return CleanName
+    end
+
     -- [Feature: Config Export/Import] Inline paste/copy box used by the
     -- "Export Config" / "Import Config" buttons in Settings -> Configs.
     -- Unlike a popup, this is built once as a normal child of the Configs
@@ -1221,11 +1292,11 @@ local Library do
         return BoxHandle
     end
 
-    Library.RefreshConfigsList = function(self, Element)
+    Library.RefreshFileList = function(self, Element, Folder)
         local CurrentList = { }
         local List = { }
 
-        for Index, Value in ipairs(listfiles(Library.Folders.Configs)) do
+        for Index, Value in ipairs(listfiles(Folder)) do
             local FileName = string.match(Value, "([^/\\]+)$")
             if FileName then
                 List[Index] = FileName
@@ -1245,6 +1316,15 @@ local Library do
             CurrentList = List
             Element:Refresh(CurrentList)
         end
+    end
+
+    Library.RefreshConfigsList = function(self, Element)
+        Library:RefreshFileList(Element, Library.Folders.Configs)
+    end
+
+    -- [Feature: Advanced Theming] Themes subpage counterpart to RefreshConfigsList
+    Library.RefreshThemesList = function(self, Element)
+        Library:RefreshFileList(Element, Library.Folders.Themes)
     end
 
     Library.ChangeItemTheme = function(self, Item, Properties)
@@ -1382,6 +1462,7 @@ local Library do
             Hub       = HubPath,
             Game      = GamePath,
             Configs   = GamePath .. "/Configs",
+            Themes    = GamePath .. "/Themes",
             Assets    = HubPath .. "/Assets",
         }
 
@@ -1391,6 +1472,7 @@ local Library do
             HubPath .. "/Assets",
             GamePath,
             GamePath .. "/Configs",
+            GamePath .. "/Themes",
         }
         for _, Path in Paths do
             if not isfolder(Path) then
@@ -6936,7 +7018,32 @@ end)
     Library.CreateSettingsPage = function(self, Window, Watermark, KeybindList)
         local SettingsPage = Window:Page({Name = "Settings", SubPages = true, PinLast = true}) do 
             local ThemingSubPage = SettingsPage:SubPage({Name = "Theming", Columns = 2}) do 
+                -- [Feature: Advanced Theming] Sections revealed/hidden by the
+                -- "Advanced Mode" toggle below. Populated once each section
+                -- is built further down; starts empty since the toggle's
+                -- own Callback fires (with its Default) before either
+                -- Section exists yet.
+                local AdvancedThemingSections = { }
+                local function SetAdvancedThemingVisible(Bool)
+                    for _, Section in AdvancedThemingSections do
+                        Section.Items["Section"].Instance.Visible = Bool
+                    end
+                end
+
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
+
+                    -- [Feature: Advanced Theming] Dev-gated switch revealing
+                    -- theme export/import + the saved-themes list below.
+                    if Library.AllowAdvancedTheming then
+                        ThemesSection:Toggle({
+                            Name = "Advanced Mode",
+                            Flag = "AdvancedTheming",
+                            Default = false,
+                            Callback = function(Value)
+                                SetAdvancedThemingVisible(Value)
+                            end
+                        })
+                    end
 
                     -- [Feature: Theme Presets] Preset picker (hidden when AllowThemePresets = false)
                     if Library.AllowThemePresets then
@@ -6980,12 +7087,133 @@ end)
                     end
                 end
 
-                -- [Feature: Theme Export] Export/Import of the current theme
-                -- colours (as opposed to Export/Import Config below, which
-                -- covers feature flags/selections). Lives in its own
-                -- persistent Section (Side 2), same treatment as the
-                -- Configs subpage's Export/Import Config Section.
-                if Library.AllowConfigExport then
+                if Library.AllowAdvancedTheming then
+                    -- [Feature: Advanced Theming] Saved-themes list + buttons,
+                    -- duplicated from the Configs subpage's Configs Section
+                    -- (Side 1) but wired to Library.Folders.Themes and
+                    -- GetThemeConfig/LoadThemeConfig instead. Same single-
+                    -- autoload enforcement via SetAutoload/RemoveAutoload.
+                    local ThemeSelected
+                    local ThemeName
+                    local UpdateThemeSelectionButtons
+                    local ThemesSearchbox
+
+                    local ThemesListSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
+                        ThemesSearchbox = ThemesListSection:Searchbox({
+                            Name = "SearchboxThemes",
+                            Flag = "ThemesSearchbox",
+                            Items = { },
+                            Multi = false,
+                            Callback = function(Value)
+                                ThemeSelected = Value
+                                UpdateThemeSelectionButtons()
+                            end
+                        })
+
+                        ThemesListSection:Textbox({
+                            Name = "Theme name",
+                            Default = "",
+                            Flag = "ThemeName",
+                            Placeholder = "Enter text",
+                            Callback = function(Value)
+                                ThemeName = Value
+                            end
+                        })
+
+                        local CreateAndDeleteButton = ThemesListSection:Button()
+
+                        CreateAndDeleteButton:Add("Create", function()
+                            if ThemeName and ThemeName ~= "" then
+                                if not isfile(Library.Folders.Themes .. "/" .. ThemeName .. ".json") then
+                                    writefile(Library.Folders.Themes .. "/" .. ThemeName .. ".json", Library:GetThemeConfig())
+                                    Library:Notification("Success", "Created theme "..ThemeName .. " succesfully", 5)
+                                    Library:RefreshThemesList(ThemesSearchbox)
+                                else
+                                    Library:Notification("Error", "Theme with the name "..ThemeName .. " already exists", 5)
+                                    return
+                                end
+                            end
+                        end)
+
+                        local DeleteButton = CreateAndDeleteButton:Add("Delete", function()
+                            if ThemeSelected then
+                                Library:DeleteTheme(ThemeSelected)
+                                Library:Notification("Success", "Deleted theme "..ThemeSelected .. " succesfully", 5)
+                                ThemeSelected = nil
+                                UpdateThemeSelectionButtons()
+                                Library:RefreshThemesList(ThemesSearchbox)
+                            end
+                        end)
+
+                        local LoadAndSaveButton = ThemesListSection:Button()
+
+                        local LoadButton = LoadAndSaveButton:Add("Load", function()
+                            if ThemeSelected then
+                                local Ok, Err = Library:LoadThemeConfig(readfile(Library.Folders.Themes .. "/" .. ThemeSelected))
+
+                                if Ok then
+                                    Library:Notification("Success", "Loaded theme "..ThemeSelected .. " succesfully", 5)
+                                else
+                                    Library:Notification("Error", "Failed to load theme "..ThemeSelected .. " report this to the devs:\n"..tostring(Err), 5)
+                                end
+                            end
+                        end)
+
+                        LoadAndSaveButton:Add("Save", function()
+                            local targetTheme = ThemeSelected
+                            if ThemeName and ThemeName ~= "" then
+                                targetTheme = ThemeName .. ".json"
+                            end
+                            if targetTheme then
+                                writefile(Library.Folders.Themes .. "/" .. targetTheme, Library:GetThemeConfig())
+                                Library:Notification("Success", "Saved theme "..targetTheme:gsub("%.json$", "").." succesfully", 5)
+                                Library:RefreshThemesList(ThemesSearchbox)
+                            else
+                                Library:Notification("Error", "Please enter a name or select a theme to save", 5)
+                            end
+                        end)
+
+                        local AutoloadButton = ThemesListSection:Button()
+                        local AutoloadActionButton = AutoloadButton:Add("Set as Autoload [AT]", function()
+                            if ThemeSelected then
+                                local NewName = Library:SetAutoload(Library.Folders.Themes, ThemeSelected)
+                                ThemeSelected = NewName
+                                Library:Notification("Success", "Set " .. NewName:gsub("%.json$", "") .. " as Autoload theme", 5)
+                                Library:RefreshThemesList(ThemesSearchbox)
+                            else
+                                Library:Notification("Error", "Please select a theme first", 5)
+                            end
+                        end)
+
+                        local RemoveAutoloadButton = AutoloadButton:Add("Remove Autoload", function()
+                            if ThemeSelected then
+                                local NewName = Library:RemoveAutoload(Library.Folders.Themes, ThemeSelected)
+                                ThemeSelected = NewName
+                                Library:Notification("Success", "Removed autoload from " .. NewName:gsub("%.json$", ""), 5)
+                                Library:RefreshThemesList(ThemesSearchbox)
+                            else
+                                Library:Notification("Error", "Please select a theme first", 5)
+                            end
+                        end)
+
+                        UpdateThemeSelectionButtons = function()
+                            local HasSelection = ThemeSelected ~= nil and ThemeSelected ~= ""
+                            DeleteButton:SetEnabled(HasSelection)
+                            LoadButton:SetEnabled(HasSelection)
+                            AutoloadActionButton:SetEnabled(HasSelection)
+                            RemoveAutoloadButton:SetEnabled(HasSelection)
+                        end
+                        UpdateThemeSelectionButtons()
+
+                        Library:RefreshThemesList(ThemesSearchbox)
+                    end
+                    TableInsert(AdvancedThemingSections, ThemesListSection)
+
+                    -- [Feature: Theme Export] Export/Import of the current theme
+                    -- colours (as opposed to Export/Import Config below, which
+                    -- covers feature flags/selections). Lives in its own
+                    -- persistent Section (Side 2), same treatment as the
+                    -- Configs subpage's Export/Import Config Section.
                     local ExportImportThemeSection = ThemingSubPage:Section({Name = "Export / Import Theme", Side = 2}) do
                         local ThemeBox = Library:BuildExportImportBox(ExportImportThemeSection.Items["Content"].Instance)
 
@@ -7027,6 +7255,12 @@ end)
                             ThemeBox:SetText("")
                         end)
                     end
+                    TableInsert(AdvancedThemingSections, ExportImportThemeSection)
+
+                    -- Hidden until the user actually flips Advanced Mode on
+                    -- (Default = false above; both Sections default Visible
+                    -- so this has to be set explicitly post-creation).
+                    SetAdvancedThemingVisible(false)
                 end
 
             end
@@ -7121,19 +7355,22 @@ end)
                     local AutoloadActionButton = AutoloadButton:Add("Set as Autoload [AT]", function()
                         local targetConfig = ConfigSelected
                         if targetConfig then
-                            local oldPath = Library.Folders.Configs .. "/" .. targetConfig
-                            if isfile(oldPath) then
-                                local cleanName = targetConfig:gsub("^%[AT%]%s*", "")
-                                local newName = "[AT] " .. cleanName
-                                local newPath = Library.Folders.Configs .. "/" .. newName
-                                local content = readfile(oldPath)
-                                writefile(newPath, content)
-                                if targetConfig ~= newName then
-                                    pcall(function() delfile(oldPath) end)
-                                end
-                                Library:Notification("Success", "Set " .. newName:gsub("%.json$", "") .. " as Autoload config", 5)
-                                Library:RefreshConfigsList(ConfigsSearchbox)
-                            end
+                            local NewName = Library:SetAutoload(Library.Folders.Configs, targetConfig)
+                            ConfigSelected = NewName
+                            Library:Notification("Success", "Set " .. NewName:gsub("%.json$", "") .. " as Autoload config", 5)
+                            Library:RefreshConfigsList(ConfigsSearchbox)
+                        else
+                            Library:Notification("Error", "Please select a config first", 5)
+                        end
+                    end)
+
+                    local RemoveAutoloadButton = AutoloadButton:Add("Remove Autoload", function()
+                        local targetConfig = ConfigSelected
+                        if targetConfig then
+                            local NewName = Library:RemoveAutoload(Library.Folders.Configs, targetConfig)
+                            ConfigSelected = NewName
+                            Library:Notification("Success", "Removed autoload from " .. NewName:gsub("%.json$", ""), 5)
+                            Library:RefreshConfigsList(ConfigsSearchbox)
                         else
                             Library:Notification("Error", "Please select a config first", 5)
                         end
@@ -7147,26 +7384,13 @@ end)
                         DeleteButton:SetEnabled(HasSelection)
                         LoadButton:SetEnabled(HasSelection)
                         AutoloadActionButton:SetEnabled(HasSelection)
+                        RemoveAutoloadButton:SetEnabled(HasSelection)
                     end
                     UpdateSelectionDependentButtons()
 
                     Library:RefreshConfigsList(ConfigsSearchbox)
                 end
 
-                -- [Feature: Config Export] Export/Import of the script's saved
-                -- config selections (flags/toggles/etc, same data as
-                -- Save/Load) -- not the theme colors. Lives in its own
-                -- persistent Section (Side 2) instead of a show/hide
-                -- dropdown-style popup, matching the config list/buttons
-                -- Section right next to it.
-                -- [Feature: Config Export] Export/Import of the script's current,
-                -- live selections (toggles/sliders/dropdowns/etc, same data as
-                -- Save/Load) -- not the theme colours, which have their own
-                -- identical-looking Section on the Theming subpage instead.
-                -- Duplicated from that Theming section, but wired to
-                -- GetConfig/LoadConfig so Export always dumps whatever is
-                -- currently set (no saved file needs to be selected first)
-                -- and Import never touches theme flags (see IsThemeFlag).
                 -- [Feature: Config Export] Export/Import of the actual saved
                 -- config files in Library.Folders.Configs (same data as the
                 -- config list/Save/Load on Side 1) -- not the theme colours,
@@ -7427,6 +7651,25 @@ end)
                         Library:Notification("Autoload", "Loaded autoload config " .. FileName:gsub("%.json$", ""), 5)
                     else
                         Library:Notification("Error", "Failed to autoload config " .. FileName:gsub("%.json$", ""), 5)
+                    end
+
+                    break
+                end
+            end
+        end
+
+        -- [Feature: Advanced Theming] Same autoload-on-startup treatment for
+        -- whichever theme is tagged "[AT] ", if the feature is enabled.
+        if Library.AllowAdvancedTheming and Library.Folders and Library.Folders.Themes and isfolder(Library.Folders.Themes) then
+            for _, Path in ipairs(listfiles(Library.Folders.Themes)) do
+                local FileName = string.match(Path, "([^/\\]+)$")
+                if FileName and FileName:match("^%[AT%]") then
+                    local Ok = Library:LoadThemeConfig(readfile(Path))
+
+                    if Ok then
+                        Library:Notification("Autoload", "Loaded autoload theme " .. FileName:gsub("%.json$", ""), 5)
+                    else
+                        Library:Notification("Error", "Failed to autoload theme " .. FileName:gsub("%.json$", ""), 5)
                     end
 
                     break
