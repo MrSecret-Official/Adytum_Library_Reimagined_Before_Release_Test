@@ -1607,8 +1607,23 @@ local Library do
                             local MaxWidth = Items["Page"].Instance.AbsoluteSize.X
                             local ContentWidth = Items["SubPages"].Instance.CanvasSize.X.Offset
 
-                            Items["SubPages"].Instance.Size = UDim2New(0, math.min(ContentWidth, MaxWidth), 0, 35)
+                            -- The page frame can briefly report an AbsoluteSize of 0
+                            -- before the engine finishes its first layout pass (or in
+                            -- some executor environments). Falling back to the raw
+                            -- content width in that case avoids the bar collapsing to
+                            -- an invisible 0px sliver instead of just being uncapped
+                            -- for a moment until a real MaxWidth comes through.
+                            local TargetWidth = (MaxWidth > 0) and math.min(ContentWidth, MaxWidth) or ContentWidth
+
+                            Items["SubPages"].Instance.Size = UDim2New(0, TargetWidth, 0, 35)
                         end
+
+                        -- Exposed so WindowSubPage can force a recompute right after
+                        -- each subpage button is added, instead of relying only on
+                        -- CanvasSize/AbsoluteSize change signals (which can lag a
+                        -- frame behind, or in rare cases not fire before the rest of
+                        -- the calling script has already finished adding subpages).
+                        Items["UpdateSubPagesBarWidth"] = UpdateSubPagesBarWidth
 
                         Library:Connect(Items["SubPages"].Instance:GetPropertyChangedSignal("CanvasSize"), UpdateSubPagesBarWidth)
                         Library:Connect(Items["Page"].Instance:GetPropertyChangedSignal("AbsoluteSize"), UpdateSubPagesBarWidth)
@@ -1990,6 +2005,19 @@ local Library do
             end
 
             TableInsert(Data.Page.SubPages, SubPage)
+
+            -- [Fix] In Auto mode the bar's width is normally kept in sync via
+            -- CanvasSize/AbsoluteSize change signals, but those can lag a frame
+            -- behind (or, in some executor environments, not have fired yet by
+            -- the time every subpage has already been added synchronously).
+            -- Forcing an explicit recompute here -- deferred one frame so the
+            -- engine has finished laying out the new button first -- guarantees
+            -- the bar always ends up sized correctly instead of staying stuck
+            -- at its initial (possibly 0px) width.
+            if Data.Page.Items["UpdateSubPagesBarWidth"] then
+                task.defer(Data.Page.Items["UpdateSubPagesBarWidth"])
+            end
+
             return SubPage
         end
 
