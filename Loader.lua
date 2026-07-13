@@ -299,16 +299,41 @@ local Library do
 
     -- [Feature: Theme Presets] Auto-saved preset choice. Selecting a preset in
     -- the dropdown persists it here immediately (no manual "save"/"create config"
-    -- step needed) and it's restored automatically on the next load.
+    -- step needed) and it's restored automatically on the next load. When the
+    -- user manually recolors anything instead of picking a registered preset,
+    -- ActivePreset becomes the special name "Custom" and the actual colours
+    -- (not just a name, since "Custom" isn't in ThemePresets) are persisted
+    -- to ActiveThemeFile in real time via SaveActiveTheme.
     Library.ActivePresetFile = Library.Folders.Directory .. "/ActivePreset.txt"
+    Library.ActiveThemeFile  = Library.Folders.Directory .. "/ActiveTheme.json"
 
     Library.SaveActivePreset = function(self, Name)
         pcall(writefile, self.ActivePresetFile, Name)
     end
 
+    Library.SaveActiveTheme = function(self)
+        pcall(writefile, self.ActiveThemeFile, self:GetThemeConfig())
+    end
+
     if isfile(Library.ActivePresetFile) then
         local Ok, SavedName = pcall(readfile, Library.ActivePresetFile)
-        if Ok and SavedName and Library.ThemePresets[SavedName] then
+        if Ok and SavedName == "Custom" then
+            local FileOk, JSON = pcall(readfile, Library.ActiveThemeFile)
+            if FileOk then
+                local DecodeOk, Decoded = pcall(HttpService.JSONDecode, HttpService, JSON)
+                if DecodeOk and type(Decoded) == "table" then
+                    for Key, HexValue in Decoded do
+                        if type(HexValue) == "string" and Library.Theme[Key] then
+                            local ColorOk, Color = pcall(FromHex, HexValue)
+                            if ColorOk then
+                                Library.Theme[Key] = Color
+                            end
+                        end
+                    end
+                    Library.ActivePreset = "Custom"
+                end
+            end
+        elseif Ok and SavedName and Library.ThemePresets[SavedName] then
             Library.ActivePreset = SavedName
             Library.Theme = TableClone(Library.ThemePresets[SavedName])
         end
@@ -7051,7 +7076,14 @@ end)
                         for Name in Library.ThemePresets do
                             TableInsert(PresetNames, Name)
                         end
-                        ThemesSection:Dropdown({
+                        -- [Feature: Custom Theme] Always present so manually
+                        -- recoloring anything (below) can flip the dropdown
+                        -- to "Custom" via Dropdown:Set, which only works if
+                        -- the option already exists in the Items it was
+                        -- built with.
+                        TableInsert(PresetNames, "Custom")
+
+                        PresetDropdown = ThemesSection:Dropdown({
                             Name = "Preset",
                             Flag = "ThemePreset",
                             Items = PresetNames,
@@ -7062,8 +7094,21 @@ end)
                                 -- Dropdown:Set(Data.Default) fires this same
                                 -- Callback once on creation with the current
                                 -- preset; skip that so the notification only
-                                -- shows on an actual user-driven change.
+                                -- shows on an actual user-driven change. Also
+                                -- catches the Dropdown:Set("Custom") call
+                                -- below firing its own Callback right back.
                                 if Value == Library.ActivePreset then
+                                    return
+                                end
+
+                                -- [Feature: Custom Theme] "Custom" has no
+                                -- registered colours to apply -- the current
+                                -- colours already ARE the custom theme, so
+                                -- just persist the label change.
+                                if Value == "Custom" then
+                                    Library.ActivePreset = "Custom"
+                                    Library:SaveActivePreset("Custom")
+                                    Library:SaveActiveTheme()
                                     return
                                 end
 
@@ -7082,6 +7127,18 @@ end)
                             Callback = function(Value)
                                 Library.Theme[Index] = Value
                                 Library:ChangeTheme(Index, Value)
+
+                                -- [Feature: Custom Theme] Any manual recolor
+                                -- flips the preset dropdown to "Custom" and
+                                -- persists the full theme in real time (no
+                                -- manual save step), the same auto-save
+                                -- treatment picking a registered preset gets.
+                                Library.ActivePreset = "Custom"
+                                if PresetDropdown then
+                                    PresetDropdown:Set("Custom")
+                                end
+                                Library:SaveActivePreset("Custom")
+                                Library:SaveActiveTheme()
                             end
                         })
                     end
