@@ -1436,6 +1436,7 @@ local Library do
                     Size = UDim2New(1, 0, 0, 25),
                     BorderSizePixel = 2,
                     TextSize = 14,
+                    LayoutOrder = Data.LayoutOrder or 0,
                     BackgroundColor3 = FromRGB(25, 30, 26)
                 })  Items["Inactive"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Border"})
 
@@ -6231,6 +6232,7 @@ end)
             Name = Data.Name or Data.name or "Page",
             Columns = Data.Columns or Data.columns or 2,
             SubPages = Data.SubPages or Data.subpages or false,
+            LayoutOrder = Data.LayoutOrder or Data.layoutorder or 0,
         }
 
         Library.SearchItems[Page] = { }
@@ -6242,6 +6244,7 @@ end)
             Parent = Page.Window.Items["Pages"],
             Columns = Page.Columns,
             SubPages = Page.SubPages,
+            LayoutOrder = Page.LayoutOrder,
             FadeTime = Page.Window.FadeTime,
             Window = Page.Window
         })
@@ -6767,7 +6770,7 @@ end)
     end
 
     Library.CreateSettingsPage = function(self, Window, Watermark, KeybindList)
-        local SettingsPage = Window:Page({Name = "Settings", SubPages = true}) do 
+        local SettingsPage = Window:Page({Name = "Settings", SubPages = true, LayoutOrder = 9999}) do 
             local ThemingSubPage = SettingsPage:SubPage({Name = "Theming", Columns = 2}) do 
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
 
