@@ -1505,19 +1505,41 @@ local Library do
                 })
 
                 if Data.SubPages then
-                    Items["SubPages"] = Instances:Create("ScrollingFrame", {
-                        Parent = Items["Page"].Instance,
-                        Name = "\0",
-                        Size = UDim2New(1, 0, 0, 35),
-                        BorderColor3 = FromRGB(42, 49, 45),
-                        BorderSizePixel = 2,
-                        AutomaticCanvasSize = Enum.AutomaticSize.X,
-                        CanvasSize = UDim2New(0, 0, 0, 0),
-                        ScrollingDirection = Enum.ScrollingDirection.X,
-                        ScrollBarThickness = 3,
-                        ScrollBarImageColor3 = FromRGB(58, 138, 224),
-                        BackgroundColor3 = FromRGB(20, 24, 21)
-                    })  Items["SubPages"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Outline", ScrollBarImageColor3 = "Accent"})
+                    -- [Feature: Subpages Bar Sizing] Two dev-selectable modes:
+                    --   Default (Data.SubPagesExpanded = false/nil): bar wraps
+                    --   buttons onto multiple rows and grows up to
+                    --   Data.SubPagesMaxHeight, then scrolls vertically for
+                    --   any rows beyond that.
+                    --   Expanded (Data.SubPagesExpanded = true): bar always
+                    --   grows to fit every row, no cap, no scrolling.
+                    local SubPagesExpanded  = Data.SubPagesExpanded or false
+                    local SubPagesMaxHeight = Data.SubPagesMaxHeight or 76 -- ~2 rows before scrolling
+
+                    if SubPagesExpanded then
+                        Items["SubPages"] = Instances:Create("Frame", {
+                            Parent = Items["Page"].Instance,
+                            Name = "\0",
+                            Size = UDim2New(1, 0, 0, 35),
+                            AutomaticSize = Enum.AutomaticSize.Y,
+                            BorderColor3 = FromRGB(42, 49, 45),
+                            BorderSizePixel = 2,
+                            BackgroundColor3 = FromRGB(20, 24, 21)
+                        })  Items["SubPages"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Outline"})
+                    else
+                        Items["SubPages"] = Instances:Create("ScrollingFrame", {
+                            Parent = Items["Page"].Instance,
+                            Name = "\0",
+                            Size = UDim2New(1, 0, 0, SubPagesMaxHeight),
+                            BorderColor3 = FromRGB(42, 49, 45),
+                            BorderSizePixel = 2,
+                            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                            CanvasSize = UDim2New(0, 0, 0, 0),
+                            ScrollingDirection = Enum.ScrollingDirection.Y,
+                            ScrollBarThickness = 3,
+                            ScrollBarImageColor3 = FromRGB(58, 138, 224),
+                            BackgroundColor3 = FromRGB(20, 24, 21)
+                        })  Items["SubPages"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Outline", ScrollBarImageColor3 = "Accent"})
+                    end
 
                     Items["SubPages"]:Border("Border")
 
@@ -1525,15 +1547,19 @@ local Library do
                         Parent = Items["SubPages"].Instance,
                         Name = "\0",
                         PaddingRight = UDimNew(0, 7),
-                        PaddingLeft = UDimNew(0, 7)
+                        PaddingLeft = UDimNew(0, 7),
+                        PaddingTop = UDimNew(0, 6),
+                        PaddingBottom = UDimNew(0, 6)
                     })
 
                     Instances:Create("UIListLayout", {
                         Parent = Items["SubPages"].Instance,
                         Name = "\0",
-                        VerticalAlignment = Enum.VerticalAlignment.Center,
+                        VerticalAlignment = Enum.VerticalAlignment.Top,
+                        HorizontalAlignment = Enum.HorizontalAlignment.Left,
                         FillDirection = Enum.FillDirection.Horizontal,
-                        Padding = UDimNew(0, 12),
+                        Wraps = true,
+                        Padding = UDimNew(0, 8),
                         SortOrder = Enum.SortOrder.LayoutOrder
                     })
 
@@ -1547,6 +1573,19 @@ local Library do
                         BorderSizePixel = 0,
                         BackgroundColor3 = FromRGB(255, 255, 255)
                     })
+
+                    -- The tab bar's height can now change (wraps to multiple
+                    -- rows, or expands freely) so keep Columns synced under it
+                    -- instead of the old fixed 51px offset.
+                    local function SyncColumnsToBarHeight()
+                        local BarHeight = Items["SubPages"].Instance.AbsoluteSize.Y
+                        local Offset = BarHeight + 16
+                        Items["Columns"].Instance.Position = UDim2New(0, 0, 0, Offset)
+                        Items["Columns"].Instance.Size = UDim2New(1, 0, 1, -Offset)
+                    end
+
+                    Items["SubPages"].Instance:GetPropertyChangedSignal("AbsoluteSize"):Connect(SyncColumnsToBarHeight)
+                    task.defer(SyncColumnsToBarHeight)
                 else
                     Instances:Create("UIListLayout", {
                         Parent = Items["Page"].Instance,
