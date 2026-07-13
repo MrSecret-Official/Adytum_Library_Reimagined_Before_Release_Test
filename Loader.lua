@@ -6898,24 +6898,24 @@ end)
                     -- [Feature: Config Export] Theme export/import (dev-togglable)
                     if Library.AllowConfigExport then
                         local ExportImportButton = ConfigsSection:Button()
-                        ExportImportButton:Add("Export Theme", function()
+                        ExportImportButton:Add("Export Config", function()
                             local ThemeJson = Library:GetThemeConfig()
-                            local ExportPath = Library.Folders.Configs .. "/theme_export.json"
-                            writefile(ExportPath, ThemeJson)
-                            Library:Notification("Success", "Theme exported to theme_export.json", 5)
+                            Library:OpenConfigBox("Export Config", "Export", ThemeJson)
                         end)
-                        ExportImportButton:Add("Import Theme", function()
-                            local ImportPath = Library.Folders.Configs .. "/theme_export.json"
-                            if isfile(ImportPath) then
-                                local Ok, Err = Library:LoadThemeConfig(readfile(ImportPath))
+                        ExportImportButton:Add("Import Config", function()
+                            Library:OpenConfigBox("Import Config", "Import", nil, function(Text)
+                                if Text == nil or Text == "" then
+                                    Library:Notification("Error", "Please paste a config first", 5)
+                                    return
+                                end
+
+                                local Ok, Err = Library:LoadThemeConfig(Text)
                                 if Ok then
-                                    Library:Notification("Success", "Theme imported successfully", 5)
+                                    Library:Notification("Success", "Config imported successfully", 5)
                                 else
                                     Library:Notification("Error", "Import failed: " .. tostring(Err), 5)
                                 end
-                            else
-                                Library:Notification("Error", "No theme_export.json found in Configs folder", 5)
-                            end
+                            end)
                         end)
                     end
                 end
