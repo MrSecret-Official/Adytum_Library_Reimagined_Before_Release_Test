@@ -1040,7 +1040,7 @@ local Library do
         local InputBox = Instances:Create("TextBox", {
             Parent = InputBackground.Instance,
             Name = "\0",
-            FontFace = Enum.Font.Code, -- monospace: aligns JSON quotes/braces, easier to read
+            FontFace = Font.fromEnum(Enum.Font.Code), -- monospace: aligns JSON quotes/braces, easier to read
             Text = "",
             PlaceholderText = "",
             MultiLine = true,
