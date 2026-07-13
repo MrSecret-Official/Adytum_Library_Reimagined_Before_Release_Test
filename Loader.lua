@@ -5605,7 +5605,27 @@ end)
         end)
 
         Window:SetOpen(true)
-        return setmetatable(Window, self)
+
+        setmetatable(Window, self)
+
+        -- Settings tab is mandatory and ALWAYS goes last, no matter how many
+        -- other pages the script adds afterward, and this cannot be disabled
+        -- or reordered from outside the library. We defer its creation with
+        -- task.defer so it runs only after the rest of the calling script's
+        -- current execution (i.e. every Window:Page(...) call the user makes
+        -- right after Window(...) returns) has finished, which guarantees
+        -- the Settings tab button is the last child added to the tab list.
+        task.defer(function()
+            local AutoWatermark = Library:Watermark("")
+            local AutoKeybindList = Library:KeybindList()
+
+            Window.Watermark = AutoWatermark
+            Window.KeybindList = AutoKeybindList
+
+            Library:CreateSettingsPage(Window, AutoWatermark, AutoKeybindList)
+        end)
+
+        return Window
     end
 
     Library.Page = function(self, Data)
