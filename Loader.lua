@@ -1577,7 +1577,7 @@ local Library do
                         AutomaticCanvasSize = Enum.AutomaticSize.X,
                         CanvasSize = UDim2New(0, 0, 0, 0),
                         ScrollingDirection = Enum.ScrollingDirection.X,
-                        ScrollBarThickness = 3,
+                        ScrollBarThickness = 0,
                         ScrollBarImageColor3 = FromRGB(58, 138, 224),
                         BackgroundColor3 = FromRGB(20, 24, 21)
                     })  Items["SubPages"]:AddToTheme({BackgroundColor3 = "Page Background", BorderColor3 = "Outline", ScrollBarImageColor3 = "Accent"})
@@ -2303,6 +2303,10 @@ local Library do
 
                 function NewButton:SetVisibility(Bool)
                     SubItems["NewButton"].Instance.Visible = Bool
+                end
+
+                function NewButton:SetText(Text)
+                    SubItems["Text"].Instance.Text = tostring(Text)
                 end
 
                 -- Greys the label out when there's nothing to act on (e.g. no
@@ -6937,12 +6941,18 @@ end)
             end
 
             local ConfigsSubPage = SettingsPage:SubPage({Name = "Configs", Columns = 2}) do 
-                local ConfigsSection = ConfigsSubPage:Section({Name = "Configs", Side = 1}) do
-                    local ConfigName
-                    local ConfigSelected
-                    local UpdateSelectionDependentButtons -- forward declared; assigned once the buttons below exist
+                -- Shared across both Sections below (config list/buttons on
+                -- Side 1, Export/Import container on Side 2) so the Export
+                -- button can be gated on the same selection state as
+                -- Delete/Load/Autoload.
+                local ConfigName
+                local ConfigSelected
+                local UpdateSelectionDependentButtons -- forward declared; assigned once the buttons below exist
 
-                    local ConfigsSearchbox = ConfigsSection:Searchbox({
+                local ConfigsSearchbox
+
+                local ConfigsSection = ConfigsSubPage:Section({Name = "Configs", Side = 1}) do
+                    ConfigsSearchbox = ConfigsSection:Searchbox({
                         Name = "SearchboxConfigs",
                         Flag = "ConfigsSearchobx",
                         Items = { },
@@ -7052,22 +7062,34 @@ end)
                     Library:RefreshConfigsList(ConfigsSearchbox)
                 end
 
-                -- [Feature: Config Export] Theme export/import (dev-togglable).
-                -- Lives in its own persistent Section (Side 2) instead of a
-                -- show/hide dropdown-style popup, matching the config
-                -- list/buttons Section right next to it.
+                -- [Feature: Config Export] Export/Import of the script's saved
+                -- config selections (flags/toggles/etc, same data as
+                -- Save/Load) -- not the theme colors. Lives in its own
+                -- persistent Section (Side 2) instead of a show/hide
+                -- dropdown-style popup, matching the config list/buttons
+                -- Section right next to it.
                 if Library.AllowConfigExport then
                     local ExportImportSection = ConfigsSubPage:Section({Name = "Export / Import Config", Side = 2}) do
                         local ConfigBox = Library:BuildExportImportBox(ExportImportSection.Items["Content"].Instance)
 
-                        local ExportCopyButton = ExportImportSection:Button()
+                        local ExportButton = ExportImportSection:Button()
 
-                        ExportCopyButton:Add("Export", function()
-                            ConfigBox:SetText(Library:GetThemeConfig())
-                            Library:Notification("Success", "Current config exported below", 3)
+                        local ExportActionButton = ExportButton:Add("Export", function()
+                            if not ConfigSelected then
+                                return
+                            end
+
+                            local Success, Result = pcall(readfile, Library.Folders.Configs .. "/" .. ConfigSelected)
+
+                            if Success then
+                                ConfigBox:SetText(Result)
+                                Library:Notification("Success", "Exported config "..ConfigSelected:gsub("%.json$", "").." below", 3)
+                            else
+                                Library:Notification("Error", "Failed to read config "..ConfigSelected, 5)
+                            end
                         end)
 
-                        ExportCopyButton:Add("Copy", function()
+                        ExportButton:Add("Copy", function()
                             if setclipboard then
                                 pcall(setclipboard, ConfigBox:GetText())
                                 Library:Notification("Success", "Config copied to clipboard", 3)
@@ -7076,9 +7098,9 @@ end)
                             end
                         end)
 
-                        local ImportButton = ExportImportSection:Button()
+                        local ImportClearButton = ExportImportSection:Button()
 
-                        ImportButton:Add("Import", function()
+                        ImportClearButton:Add("Import", function()
                             local Text = ConfigBox:GetText()
 
                             if Text == nil or Text == "" then
@@ -7086,13 +7108,34 @@ end)
                                 return
                             end
 
-                            local Ok, Err = Library:LoadThemeConfig(Text)
+                            local Ok, Err = Library:LoadConfig(Text)
                             if Ok then
                                 Library:Notification("Success", "Config imported successfully", 5)
                             else
                                 Library:Notification("Error", "Import failed: " .. tostring(Err), 5)
                             end
                         end)
+
+                        ImportClearButton:Add("Clear", function()
+                            ConfigBox:SetText("")
+                        end)
+
+                        -- Same selection-gated greying as Delete/Load/Autoload,
+                        -- plus a label swap since "Export" doesn't make sense
+                        -- to leave up when there's nothing selected to export.
+                        local function UpdateExportButton()
+                            local HasSelection = ConfigSelected ~= nil and ConfigSelected ~= ""
+                            ExportActionButton:SetEnabled(HasSelection)
+                            ExportActionButton:SetText(HasSelection and "Export" or "No config selected")
+                        end
+
+                        UpdateExportButton()
+
+                        local PreviousUpdateSelectionDependentButtons = UpdateSelectionDependentButtons
+                        UpdateSelectionDependentButtons = function()
+                            PreviousUpdateSelectionDependentButtons()
+                            UpdateExportButton()
+                        end
                     end
                 end
             end
