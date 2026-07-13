@@ -119,6 +119,12 @@ local Library do
 
         Colorpickers = { },
 
+        -- [Feature: Advanced Theming] Set to true while batch-updating
+        -- colorpicker UIs (RefreshThemeColorpickers) so the individual picker
+        -- callbacks don't re-flip ActivePreset to "Custom" or retrigger
+        -- SaveActiveTheme while a preset switch is already in progress.
+        _SuppressThemeCallbacks = false,
+
         -- [Feature: Theme Presets] Registry of colour presets
         ThemePresets = { },
         ActivePreset  = "Default",
@@ -1452,8 +1458,11 @@ local Library do
         return table.concat(Lines, "\n")
     end
 
-    -- [Feature: Config Export] Load theme colours from a JSON string
-    Library.LoadThemeConfig = function(self, JSON)
+    -- [Feature: Config Export] Load theme colours from a JSON string.
+    -- Pass AutoSave = true to also persist the loaded colours as the active
+    -- custom theme (used by the autoload path). Manual Load button should
+    -- NOT pass AutoSave so it stays ephemeral.
+    Library.LoadThemeConfig = function(self, JSON, AutoSave)
         local Ok, Decoded = pcall(HttpService.JSONDecode, HttpService, JSON)
         if not Ok or type(Decoded) ~= "table" then
             return false, "Invalid JSON"
@@ -1466,7 +1475,37 @@ local Library do
                 end
             end
         end
+        -- Refresh colorpicker UIs so they show the newly loaded colours
+        self:RefreshThemeColorpickers()
+        if AutoSave then
+            -- [Feature: Autoload] Autoloaded theme takes priority: persist it
+            -- as the active custom theme so on the next launch the library
+            -- restores it instead of whichever preset was previously saved.
+            self.ActivePreset = "Custom"
+            self:SaveActivePreset("Custom")
+            self:SaveActiveTheme()
+        end
         return true
+    end
+
+    -- [Feature: Advanced Theming] Push current Library.Theme colours into all
+    -- registered theme-colorpicker UIs so they reflect an externally applied
+    -- theme (preset switch or file load) without the user having to reopen
+    -- the picker. Uses _SuppressThemeCallbacks so the individual picker
+    -- callbacks don't re-flip ActivePreset to "Custom" while refreshing.
+    Library.RefreshThemeColorpickers = function(self)
+        self._SuppressThemeCallbacks = true
+        for _, Picker in self.Colorpickers do
+            local Flag = Picker.Flag
+            if type(Flag) == "string" and Flag:match("Theme$") then
+                local ColorName = Flag:gsub("Theme$", "")
+                local Color = self.Theme[ColorName]
+                if Color then
+                    pcall(function() Picker:Set(Color, Picker.Alpha) end)
+                end
+            end
+        end
+        self._SuppressThemeCallbacks = false
     end
 
     -- [Feature: Folder Structure] Build per-hub per-game folder tree
@@ -7055,6 +7094,23 @@ end)
                     end
                 end
 
+                -- Upvalue so the colorpicker callbacks (ColorsSection, Side=2)
+                -- can still flip the dropdown to "Custom".
+                local PresetDropdown
+
+                -- [Feature: Layout] Side=1 (LEFT column):
+                --   1. ThemesSection  -- Advanced Mode toggle + Preset dropdown
+                --   2. ThemesListSection  -- (advanced) saved-themes CRUD list
+                -- Side=2 (RIGHT column):
+                --   1. ColorsSection  -- per-colour colorpickers
+                --   2. ExportImportThemeSection  -- (advanced) export/import box
+                --
+                -- This keeps the themes list at the TOP of the left column so
+                -- it visually sits above (and beside) the export/import section
+                -- on the right, exactly as the user specified.
+
+                -- ── LEFT COLUMN ────────────────────────────────────────────
+
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
 
                     -- [Feature: Advanced Theming] Dev-gated switch revealing
@@ -7077,10 +7133,10 @@ end)
                             TableInsert(PresetNames, Name)
                         end
                         -- [Feature: Custom Theme] Always present so manually
-                        -- recoloring anything (below) can flip the dropdown
-                        -- to "Custom" via Dropdown:Set, which only works if
-                        -- the option already exists in the Items it was
-                        -- built with.
+                        -- recoloring anything (in ColorsSection below) can flip
+                        -- the dropdown to "Custom" via Dropdown:Set, which only
+                        -- works if the option already exists in the Items it
+                        -- was built with.
                         TableInsert(PresetNames, "Custom")
 
                         PresetDropdown = ThemesSection:Dropdown({
@@ -7113,49 +7169,29 @@ end)
                                 end
 
                                 Library:SetThemePreset(Value)
+                                -- Refresh the colorpicker UIs to reflect the new preset
+                                Library:RefreshThemeColorpickers()
                                 Library:SaveActivePreset(Value)
                                 Library:Notification("Success", "Preset theme saved automatically", 3)
                             end
                         })
                     end
-
-                    for Index, Value in Library.Theme do 
-                        ThemesSection:Label(Index):Colorpicker({
-                            Name = Index,
-                            Flag = Index.."Theme",
-                            Default = Value,
-                            Callback = function(Value)
-                                Library.Theme[Index] = Value
-                                Library:ChangeTheme(Index, Value)
-
-                                -- [Feature: Custom Theme] Any manual recolor
-                                -- flips the preset dropdown to "Custom" and
-                                -- persists the full theme in real time (no
-                                -- manual save step), the same auto-save
-                                -- treatment picking a registered preset gets.
-                                Library.ActivePreset = "Custom"
-                                if PresetDropdown then
-                                    PresetDropdown:Set("Custom")
-                                end
-                                Library:SaveActivePreset("Custom")
-                                Library:SaveActiveTheme()
-                            end
-                        })
-                    end
                 end
 
+                -- [Feature: Advanced Theming] Saved-themes list + CRUD buttons.
+                -- Placed on Side=1 so it appears in the LEFT column, directly
+                -- below ThemesSection (compact: only toggle + dropdown), which
+                -- means the list sits at the top-left and is vertically aligned
+                -- with (and above) ExportImportThemeSection on the right.
+                -- Only create/delete/save/load/autoload are available in
+                -- advanced mode per spec.
                 if Library.AllowAdvancedTheming then
-                    -- [Feature: Advanced Theming] Saved-themes list + buttons,
-                    -- duplicated from the Configs subpage's Configs Section
-                    -- (Side 1) but wired to Library.Folders.Themes and
-                    -- GetThemeConfig/LoadThemeConfig instead. Same single-
-                    -- autoload enforcement via SetAutoload/RemoveAutoload.
                     local ThemeSelected
                     local ThemeName
                     local UpdateThemeSelectionButtons
                     local ThemesSearchbox
 
-                    local ThemesListSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
+                    local ThemesListSection = ThemingSubPage:Section({Name = "Saved Themes", Side = 1}) do
                         ThemesSearchbox = ThemesListSection:Searchbox({
                             Name = "SearchboxThemes",
                             Flag = "ThemesSearchbox",
@@ -7204,9 +7240,17 @@ end)
 
                         local LoadAndSaveButton = ThemesListSection:Button()
 
+                        -- [Feature: Custom Theme] Loading a saved .json theme
+                        -- does NOT autosave (no AutoSave flag) -- the loaded
+                        -- colours are applied visually but the active-preset
+                        -- persistence is left untouched. Only autoloaded themes
+                        -- persist automatically (see startup block below).
                         local LoadButton = LoadAndSaveButton:Add("Load", function()
                             if ThemeSelected then
-                                local Ok, Err = Library:LoadThemeConfig(readfile(Library.Folders.Themes .. "/" .. ThemeSelected))
+                                local Ok, Err = Library:LoadThemeConfig(
+                                    readfile(Library.Folders.Themes .. "/" .. ThemeSelected)
+                                    -- no AutoSave: manual load stays ephemeral
+                                )
 
                                 if Ok then
                                     Library:Notification("Success", "Loaded theme "..ThemeSelected .. " succesfully", 5)
@@ -7265,12 +7309,50 @@ end)
                         Library:RefreshThemesList(ThemesSearchbox)
                     end
                     TableInsert(AdvancedThemingSections, ThemesListSection)
+                end
 
+                -- ── RIGHT COLUMN ───────────────────────────────────────────
+
+                -- [Feature: Theme Colors] Per-colour colorpickers on Side=2
+                -- (right column) so they don't push the themes list down on
+                -- the left. Each colorpicker callback flips the preset
+                -- dropdown to "Custom" and auto-saves in real time.
+                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 2}) do
+                    for Index, Value in Library.Theme do 
+                        ColorsSection:Label(Index):Colorpicker({
+                            Name = Index,
+                            Flag = Index.."Theme",
+                            Default = Value,
+                            Callback = function(Value)
+                                -- Suppressed during batch refresh (preset switch
+                                -- or autoload) so we don't re-flip to "Custom".
+                                if Library._SuppressThemeCallbacks then return end
+
+                                Library.Theme[Index] = Value
+                                Library:ChangeTheme(Index, Value)
+
+                                -- [Feature: Custom Theme] Any manual recolor
+                                -- flips the preset dropdown to "Custom" and
+                                -- persists the full theme in real time (no
+                                -- manual save step), the same auto-save
+                                -- treatment picking a registered preset gets.
+                                Library.ActivePreset = "Custom"
+                                if PresetDropdown then
+                                    PresetDropdown:Set("Custom")
+                                end
+                                Library:SaveActivePreset("Custom")
+                                Library:SaveActiveTheme()
+                            end
+                        })
+                    end
+                end
+
+                if Library.AllowAdvancedTheming then
                     -- [Feature: Theme Export] Export/Import of the current theme
                     -- colours (as opposed to Export/Import Config below, which
                     -- covers feature flags/selections). Lives in its own
-                    -- persistent Section (Side 2), same treatment as the
-                    -- Configs subpage's Export/Import Config Section.
+                    -- persistent Section (Side=2 RIGHT column), below the
+                    -- ColorsSection colorpickers.
                     local ExportImportThemeSection = ThemingSubPage:Section({Name = "Export / Import Theme", Side = 2}) do
                         local ThemeBox = Library:BuildExportImportBox(ExportImportThemeSection.Items["Content"].Instance)
 
@@ -7717,11 +7799,14 @@ end)
 
         -- [Feature: Advanced Theming] Same autoload-on-startup treatment for
         -- whichever theme is tagged "[AT] ", if the feature is enabled.
+        -- AutoSave = true so the loaded colours overwrite the ActivePreset/
+        -- ActiveTheme persistence files, giving the autoloaded theme priority
+        -- over any preset that was previously active.
         if Library.AllowAdvancedTheming and Library.Folders and Library.Folders.Themes and isfolder(Library.Folders.Themes) then
             for _, Path in ipairs(listfiles(Library.Folders.Themes)) do
                 local FileName = string.match(Path, "([^/\\]+)$")
                 if FileName and FileName:match("^%[AT%]") then
-                    local Ok = Library:LoadThemeConfig(readfile(Path))
+                    local Ok = Library:LoadThemeConfig(readfile(Path), true)  -- AutoSave: persist as active custom theme
 
                     if Ok then
                         Library:Notification("Autoload", "Loaded autoload theme " .. FileName:gsub("%.json$", ""), 5)
