@@ -5301,70 +5301,13 @@ end)
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["Logo"]:AddToTheme({ImageColor3 = "Accent"})
 
-            Items["Search"] = Instances:Create("Frame", {
-                Parent = Items["Side"].Instance,
-                Name = "\0",
-                BorderColor3 = FromRGB(12, 12, 12),
-                AnchorPoint = Vector2New(0, 1),
-                BackgroundTransparency = 0.4000000059604645,
-                Position = UDim2New(0, 6, 1, -6),
-                Size = UDim2New(0, 0, 0, 20),
-                BorderSizePixel = 2,
-                AutomaticSize = Enum.AutomaticSize.X,
-                BackgroundColor3 = FromRGB(14, 17, 15)
-            })  Items["Search"]:AddToTheme({BackgroundColor3 = "Background", BorderColor3 = "Border"})
-
-            Items["SearchStroke"] = Items["Search"]:Border("Outline")
-
-            Items["Icon"] = Instances:Create("ImageLabel", {
-                Parent = Items["Search"].Instance,
-                Name = "\0",
-                ScaleType = Enum.ScaleType.Fit,
-                BorderColor3 = FromRGB(0, 0, 0),
-                AnchorPoint = Vector2New(0, 0.5),
-                Image = "rbxassetid://71197946135150",
-                BackgroundTransparency = 1,
-                Position = UDim2New(0, 0, 0.5, 0),
-                Size = UDim2New(0, 16, 0, 16),
-                BorderSizePixel = 0,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-
-            Items["Input"] = Instances:Create("TextBox", {
-                Parent = Items["Search"].Instance,
-                Name = "\0",
-                FontFace = Library.Font,
-                CursorPosition = -1,
-                TextColor3 = FromRGB(235, 235, 235),
-                BorderColor3 = FromRGB(0, 0, 0),
-                Text = "",
-                Size = UDim2New(0, 0, 1, 0),
-                Position = UDim2New(0, 22, 0, 0),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 1,
-                PlaceholderColor3 = FromRGB(185, 185, 185),
-                AutomaticSize = Enum.AutomaticSize.X,
-                PlaceholderText = "..",
-                TextSize = 9,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })  Items["Input"]:AddToTheme({TextColor3 = "Text", PlaceholderColor3 = "Placeholder Text"})
-
-            Items["Input"]:TextBorder()
-
-            Instances:Create("UIPadding", {
-                Parent = Items["Search"].Instance,
-                Name = "\0",
-                PaddingRight = UDimNew(0, 5),
-                PaddingLeft = UDimNew(0, 3)
-            })
-
             Items["Pages"] = Instances:Create("Frame", {
                 Parent = Items["Side"].Instance,
                 Name = "\0",
                 BackgroundTransparency = 1,
                 Position = UDim2New(0, 0, 0, 100),
                 BorderColor3 = FromRGB(0, 0, 0),
-                Size = UDim2New(1, 0, 1, -135),
+                Size = UDim2New(1, 0, 1, -174),
                 BorderSizePixel = 0,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })
@@ -5385,26 +5328,78 @@ end)
 
             local Content, _ = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
 
-            Items["Avatar"] = Instances:Create("ImageLabel", {
+            -- Player profile block: sits below the tab list, shows photo,
+            -- username, and user ID underneath the username. Not optional.
+            Items["Profile"] = Instances:Create("Frame", {
                 Parent = Items["Side"].Instance,
                 Name = "\0",
+                BackgroundTransparency = 0.25,
+                BorderColor3 = FromRGB(16, 28, 44),
+                AnchorPoint = Vector2New(0, 1),
+                Position = UDim2New(0, 6, 1, -6),
+                Size = UDim2New(1, -12, 0, 54),
+                BorderSizePixel = 2,
+                BackgroundColor3 = FromRGB(12, 22, 36)
+            })  Items["Profile"]:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
+
+            Items["Profile"]:Border("Border")
+
+            Items["ProfileAvatar"] = Instances:Create("ImageLabel", {
+                Parent = Items["Profile"].Instance,
+                Name = "\0",
                 BorderColor3 = FromRGB(0, 0, 0),
-                AnchorPoint = Vector2New(1, 1),
+                AnchorPoint = Vector2New(0, 0.5),
                 Image = Content,
                 BackgroundTransparency = 1,
-                Position = UDim2New(1, -6, 1, -6),
-                Size = UDim2New(0, 25, 0, 25),
+                Position = UDim2New(0, 8, 0.5, 0),
+                Size = UDim2New(0, 38, 0, 38),
                 BorderSizePixel = 0,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })
 
-            Items["Avatar"]:Border("Outline").Instance.LineJoinMode = Enum.LineJoinMode.Round
+            Items["ProfileAvatar"]:Border("Outline").Instance.LineJoinMode = Enum.LineJoinMode.Round
 
             Instances:Create("UICorner", {
-                Parent = Items["Avatar"].Instance,
+                Parent = Items["ProfileAvatar"].Instance,
                 Name = "\0",
                 CornerRadius = UDimNew(1, 0)
             })
+
+            Items["ProfileUsername"] = Instances:Create("TextLabel", {
+                Parent = Items["Profile"].Instance,
+                Name = "\0",
+                FontFace = Library.Font,
+                TextColor3 = FromRGB(222, 236, 248),
+                BorderColor3 = FromRGB(0, 0, 0),
+                Text = LocalPlayer.Name,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                Position = UDim2New(0, 54, 0, 9),
+                Size = UDim2New(1, -60, 0, 14),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 1,
+                TextSize = 12,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })  Items["ProfileUsername"]:AddToTheme({TextColor3 = "Text"})
+
+            Items["ProfileUsername"]:TextBorder()
+
+            Items["ProfileUserId"] = Instances:Create("TextLabel", {
+                Parent = Items["Profile"].Instance,
+                Name = "\0",
+                FontFace = Library.Font,
+                TextColor3 = FromRGB(138, 160, 184),
+                BorderColor3 = FromRGB(0, 0, 0),
+                Text = tostring(LocalPlayer.UserId),
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                Position = UDim2New(0, 54, 0, 27),
+                Size = UDim2New(1, -60, 0, 12),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 1,
+                TextSize = 9,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })  Items["ProfileUserId"]:AddToTheme({TextColor3 = "Placeholder Text"})
 
             Items["Content"] = Instances:Create("Frame", {
                 Parent = Items["Window"].Instance,
@@ -5454,26 +5449,6 @@ end)
         end
 
         local Debounce = false
-
-        Items["Input"]:Connect("Focused", function()
-            Items["Search"]:Tween(nil, {BackgroundTransparency = 0})
-            Items["SearchStroke"]:Tween(nil, {Transparency = 0})
-        end)
-
-        Items["Input"]:Connect("FocusLost", function()
-            Items["Search"]:Tween(nil, {BackgroundTransparency = 0.4})
-            Items["SearchStroke"]:Tween(nil, {Transparency = 0.4})
-        end)
-
-        Items["Input"]:OnHover(function()
-            Items["Search"]:ChangeItemTheme({BackgroundColor3 = "Hovered Element", BorderColor3 = "Border"})
-            Items["Search"]:Tween(nil, {BackgroundColor3 = Library.Theme["Hovered Element"]})
-        end)
-
-        Items["Input"]:OnHoverLeave(function()
-            Items["Search"]:ChangeItemTheme({BackgroundColor3 = "Background", BorderColor3 = "Border"})
-            Items["Search"]:Tween(nil, {BackgroundColor3 = Library.Theme.Background})
-        end)
 
         -- Track mouse cursor only while the color picker window is open
         local MouseTrackConn
@@ -5562,45 +5537,6 @@ end)
         Library:Connect(UserInputService.InputBegan, function(Input)
             if tostring(Input.KeyCode) == Library.MenuKeybind or tostring(Input.UserInputType) == Library.MenuKeybind then
                 Window:SetOpen(not Window.IsOpen)
-            end
-        end)
-
-        local SearchStepped
-
-        Items["Input"]:Connect("Focused", function()
-            local PageSearchData = Library.SearchItems[Library.CurrentPage]
-
-            if not PageSearchData then
-                return 
-            end
-
-            SearchStepped = RunService.RenderStepped:Connect(function()
-                for Index, Value in PageSearchData do 
-                    local Name = Value.Name
-                    local Element = Value.Element
-
-                    if StringFind(StringLower(Name), StringLower(Items["Input"].Instance.Text)) then
-                        if Items["Input"].Instance.Text ~= "" then 
-                            Element.Instance.Visible  = true 
-                            Element:Tween(TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = Window:GetOldSize(Element)})
-                        else
-                            Element.Instance.Visible  = true 
-                            Element:Tween(TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = Window:GetOldSize(Element)})
-                        end
-                    else
-                        Window:AddToOldSizes(Element, Element.Instance.Size)
-                        Element:Tween(TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2New(Window:GetOldSize(Element).X.Scale, Window:GetOldSize(Element).X.Offset, 0, 0)})
-                        task.wait(0.1)
-                        Element.Instance.Visible = false
-                    end
-                end
-            end)
-        end)
-
-        Items["Input"]:Connect("FocusLost", function()
-            if SearchStepped then 
-                SearchStepped:Disconnect()
-                SearchStepped = nil
             end
         end)
 
