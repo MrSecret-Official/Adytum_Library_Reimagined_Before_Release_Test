@@ -651,135 +651,9 @@ local Library do
                 end
             end)
 
-            return Resizing
+            return Resizing, ResizeButton
         end
 
-        -- Ported from the old library: side/top/bottom edge resize strips,
-        -- in addition to the corner handle above. Both respect the same
-        -- Minimum/Maximum Vector2 clamps.
-        Instances.MakeEdgeResizeable = function(self, Minimum, Maximum)
-            if not self.Instance then 
-                return
-            end
-
-            local Gui = self.Instance
-
-            Minimum = Minimum or Vector2New(Gui.AbsoluteSize.X, Gui.AbsoluteSize.Y)
-            Maximum = Maximum or Vector2New(9999, 9999)
-
-            local HandleThickness = 6
-
-            -- Strips are parented INSIDE the window frame (same as the
-            -- corner handle) and positioned with Scale + Offset so they
-            -- automatically follow the window's position/size with no
-            -- RenderStepped tracking needed.
-            --
-            -- NOTE: the window Frame has ClipsDescendants = true, so strips
-            -- must stay fully WITHIN the frame's bounds. Any child positioned
-            -- outside those bounds (e.g. with a negative offset) gets clipped
-            -- and becomes both invisible and unclickable.
-            local function MakeStrip(Position, Size, AnchorPoint)
-                local Strip = Instances:Create("TextButton", {
-                    Parent = Gui,
-                    Name = "\0",
-                    AnchorPoint = AnchorPoint,
-                    Position = Position,
-                    Size = Size,
-                    BackgroundTransparency = 0.85,
-                    BackgroundColor3 = FromRGB(255, 255, 255),
-                    BorderSizePixel = 0,
-                    Text = "",
-                    AutoButtonColor = false,
-                    ZIndex = 999,
-                    Active = true,
-                })  Strip:AddToTheme({BackgroundColor3 = "Accent"})
-
-                Strip:OnHover(function()
-                    Strip.Instance.BackgroundTransparency = 0.4
-                end)
-                Strip:OnHoverLeave(function()
-                    Strip.Instance.BackgroundTransparency = 0.85
-                end)
-
-                return Strip
-            end
-
-            local StripRight = MakeStrip(UDim2New(1, -HandleThickness, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
-            local StripLeft = MakeStrip(UDim2New(0, 0, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
-            local StripTop = MakeStrip(UDim2New(0, 0, 0, 0), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 0))
-            local StripBottom = MakeStrip(UDim2New(0, 0, 1, -HandleThickness), UDim2New(1, 0, 0, HandleThickness), Vector2New(0, 0))
-
-            local EdgeResizing = false
-            local EdgeResizeFn = nil
-            local EdgeMouseStart = nil
-            local EdgePosStart = nil
-            local EdgeSizeStart = nil
-
-            local function BeginEdgeResize(Fn, Input)
-                EdgeResizing = true
-                EdgeResizeFn = Fn
-                EdgeMouseStart = Input.Position
-                EdgePosStart = Vector2New(Gui.Position.X.Offset, Gui.Position.Y.Offset)
-                EdgeSizeStart = Vector2New(Gui.AbsoluteSize.X, Gui.AbsoluteSize.Y)
-            end
-
-            local function IsResizeInput(Input)
-                return Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch
-            end
-
-            StripRight:Connect("InputBegan", function(Input)
-                if not IsResizeInput(Input) then return end
-                BeginEdgeResize(function(dx, _)
-                    local w = MathClamp(EdgeSizeStart.X + dx, Minimum.X, Maximum.X)
-                    Gui.Size = UDim2New(0, w, 0, EdgeSizeStart.Y)
-                    Gui.Position = UDim2New(0, EdgePosStart.X, 0, EdgePosStart.Y)
-                end, Input)
-            end)
-
-            StripLeft:Connect("InputBegan", function(Input)
-                if not IsResizeInput(Input) then return end
-                BeginEdgeResize(function(dx, _)
-                    local w = MathClamp(EdgeSizeStart.X - dx, Minimum.X, Maximum.X)
-                    local nx = EdgePosStart.X + (EdgeSizeStart.X - w)
-                    Gui.Size = UDim2New(0, w, 0, EdgeSizeStart.Y)
-                    Gui.Position = UDim2New(0, nx, 0, EdgePosStart.Y)
-                end, Input)
-            end)
-
-            StripTop:Connect("InputBegan", function(Input)
-                if not IsResizeInput(Input) then return end
-                BeginEdgeResize(function(_, dy)
-                    local h = MathClamp(EdgeSizeStart.Y - dy, Minimum.Y, Maximum.Y)
-                    local ny = EdgePosStart.Y + (EdgeSizeStart.Y - h)
-                    Gui.Size = UDim2New(0, EdgeSizeStart.X, 0, h)
-                    Gui.Position = UDim2New(0, EdgePosStart.X, 0, ny)
-                end, Input)
-            end)
-
-            StripBottom:Connect("InputBegan", function(Input)
-                if not IsResizeInput(Input) then return end
-                BeginEdgeResize(function(_, dy)
-                    local h = MathClamp(EdgeSizeStart.Y + dy, Minimum.Y, Maximum.Y)
-                    Gui.Size = UDim2New(0, EdgeSizeStart.X, 0, h)
-                    Gui.Position = UDim2New(0, EdgePosStart.X, 0, EdgePosStart.Y)
-                end, Input)
-            end)
-
-            Library:Connect(UserInputService.InputEnded, function(Input)
-                if IsResizeInput(Input) then
-                    EdgeResizing = false
-                    EdgeResizeFn = nil
-                end
-            end)
-
-            Library:Connect(UserInputService.InputChanged, function(Input)
-                if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
-                    if EdgeResizing and EdgeResizeFn then
-                        EdgeResizeFn(Input.Position.X - EdgeMouseStart.X, Input.Position.Y - EdgeMouseStart.Y)
-                    end
-                end
-            end)
-        end
 
         Instances.OnHover = function(self, Function)
             if not self.Instance then 
@@ -1438,8 +1312,8 @@ local Library do
                     local Minimum = Data.MinSize or Vector2New(Data.Size.X.Offset, Data.Size.Y.Offset)
                     local Maximum = Data.MaxSize or Vector2New(9999, 9999)
 
-                    Items["Window"]:MakeResizeable(Minimum, Maximum)
-                    Items["Window"]:MakeEdgeResizeable(Minimum, Maximum)
+                    local _, ResizeHandle = Items["Window"]:MakeResizeable(Minimum, Maximum)
+                    Items["ResizeButton"] = ResizeHandle
                 end
 
                 Items["UIStroke"] = Items["Window"]:Border("Outline")
@@ -5883,12 +5757,18 @@ end)
                             Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.2, true
                         )
                         Items["MinimizeBtn"].Instance.Text = "□"
+                        if Items["ResizeButton"] then
+                            Items["ResizeButton"].Instance.Visible = false
+                        end
                     else
                         Items["Window"].Instance:TweenSize(
                             FullSize,
                             Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.2, true
                         )
                         Items["MinimizeBtn"].Instance.Text = "—"
+                        if Items["ResizeButton"] then
+                            Items["ResizeButton"].Instance.Visible = true
+                        end
                     end
                 end)
 
