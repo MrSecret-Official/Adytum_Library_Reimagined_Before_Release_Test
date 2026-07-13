@@ -1,13 +1,10 @@
-if Library then
-    Library:Unload()
-end
-
 local LoadTick = os.clock()
 
-if getgenv().Adytum_Cleanup then
-    pcall(getgenv().Adytum_Cleanup)
-end
-getgenv().Adytum_Cleanup = nil
+-- [Feature: Multi-instance Safety] Keyed by creator + script title + game, so
+-- reopening the SAME hub's script in the SAME game replaces its own previous
+-- window, while a different hub's script (sharing this same library file)
+-- is left completely alone.
+getgenv().Adytum_Instances = getgenv().Adytum_Instances or { }
 
 local Library do
     local Workspace = game:GetService("Workspace")
@@ -973,71 +970,42 @@ local Library do
         end
     end
 
-    -- [Feature: Config Export/Import] Shared paste/copy box used by the
-    -- "Export Config" / "Import Config" buttons. Mode "Export" pre-fills the
-    -- box with the given text and shows a Copy button; Mode "Import" shows an
-    -- empty placeholder box and an Import button that hands the pasted text
-    -- back to Callback(Text).
-    Library.OpenConfigBox = function(self, Title, Mode, PresetText, Callback)
-        local Overlay = Instances:Create("Frame", {
-            Parent = Library.Holder.Instance,
-            Name = "\0",
-            Size = UDim2New(1, 0, 1, 0),
-            Position = UDim2New(0, 0, 0, 0),
-            BackgroundColor3 = FromRGB(0, 0, 0),
-            BackgroundTransparency = 0.4,
-            BorderSizePixel = 0,
-            ZIndex = 1000
-        })
-
+    -- [Feature: Config Export/Import] Inline paste/copy box used by the
+    -- "Export Config" / "Import Config" buttons in Settings -> Configs.
+    -- Unlike a popup, this is built once as a normal child of the Configs
+    -- section (Parent) and just shows/hides + swaps its own content, so
+    -- there's no separate floating window/interface involved.
+    Library.BuildInlineConfigBox = function(self, Parent)
         local Box = Instances:Create("Frame", {
-            Parent = Overlay.Instance,
+            Parent = Parent,
             Name = "\0",
-            AnchorPoint = Vector2New(0.5, 0.5),
-            Position = UDim2New(0.5, 0, 0.5, 0),
-            Size = UDim2New(0, 480, 0, 380),
+            Size = UDim2New(1, 0, 0, 210),
             BorderSizePixel = 2,
             BorderColor3 = FromRGB(12, 12, 12),
             BackgroundColor3 = FromRGB(6, 12, 20),
-            ZIndex = 1001
+            Visible = false
         })  Box:AddToTheme({BackgroundColor3 = "Background", BorderColor3 = "Border"})
         Box:Border("Border")
 
         local BoxCorner = InstanceNew("UICorner")
         BoxCorner.Name = "\0"
-        BoxCorner.CornerRadius = UDimNew(0, 6)
+        BoxCorner.CornerRadius = UDimNew(0, 4)
         BoxCorner.Parent = Box.Instance
 
         local TitleLabel = Instances:Create("TextLabel", {
             Parent = Box.Instance,
             Name = "\0",
             FontFace = Library.Font,
-            Text = Title,
+            Text = "",
             TextColor3 = FromRGB(222, 236, 248),
             TextXAlignment = Enum.TextXAlignment.Left,
-            Position = UDim2New(0, 14, 0, 12),
-            Size = UDim2New(1, -28, 0, 20),
+            Position = UDim2New(0, 10, 0, 8),
+            Size = UDim2New(1, -40, 0, 16),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            TextSize = 15,
-            ZIndex = 1002
+            TextSize = 13
         })  TitleLabel:AddToTheme({TextColor3 = "Text"})
         TitleLabel:TextBorder()
-
-        local SubtitleLabel = Instances:Create("TextLabel", {
-            Parent = Box.Instance,
-            Name = "\0",
-            FontFace = Library.Font,
-            Text = Mode == "Import" and "Paste a config below and press Import" or "Copy the config below to share your theme",
-            TextColor3 = FromRGB(138, 160, 184),
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Position = UDim2New(0, 14, 0, 32),
-            Size = UDim2New(1, -28, 0, 14),
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            TextSize = 11,
-            ZIndex = 1002
-        })  SubtitleLabel:AddToTheme({TextColor3 = "Placeholder Text"})
 
         local CloseButton = Instances:Create("TextButton", {
             Parent = Box.Instance,
@@ -1047,23 +1015,21 @@ local Library do
             AutoButtonColor = false,
             TextColor3 = FromRGB(138, 160, 184),
             AnchorPoint = Vector2New(1, 0),
-            Position = UDim2New(1, -8, 0, 8),
-            Size = UDim2New(0, 22, 0, 22),
+            Position = UDim2New(1, -6, 0, 6),
+            Size = UDim2New(0, 20, 0, 20),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            TextSize = 14,
-            ZIndex = 1002
+            TextSize = 13
         })  CloseButton:AddToTheme({TextColor3 = "Placeholder Text"})
 
         local InputBackground = Instances:Create("Frame", {
             Parent = Box.Instance,
             Name = "\0",
-            Position = UDim2New(0, 14, 0, 54),
-            Size = UDim2New(1, -28, 1, -108),
+            Position = UDim2New(0, 10, 0, 30),
+            Size = UDim2New(1, -20, 1, -76),
             BorderSizePixel = 2,
             BorderColor3 = FromRGB(12, 12, 12),
-            BackgroundColor3 = FromRGB(12, 22, 36),
-            ZIndex = 1002
+            BackgroundColor3 = FromRGB(12, 22, 36)
         })  InputBackground:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
 
         local InputCorner = InstanceNew("UICorner")
@@ -1074,12 +1040,12 @@ local Library do
         local InputBox = Instances:Create("TextBox", {
             Parent = InputBackground.Instance,
             Name = "\0",
-            FontFace = Enum.Font.Code, -- monospace: aligns JSON quotes/braces, far easier to read
-            Text = PresetText or "",
-            PlaceholderText = Mode == "Import" and "Paste your config here..." or "",
+            FontFace = Enum.Font.Code, -- monospace: aligns JSON quotes/braces, easier to read
+            Text = "",
+            PlaceholderText = "",
             MultiLine = true,
             ClearTextOnFocus = false,
-            TextEditable = Mode == "Import",
+            TextEditable = false,
             TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
@@ -1087,10 +1053,9 @@ local Library do
             PlaceholderColor3 = FromRGB(138, 160, 184),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2New(0, 10, 0, 8),
-            Size = UDim2New(1, -20, 1, -16),
-            TextSize = 14,
-            ZIndex = 1003
+            Position = UDim2New(0, 8, 0, 6),
+            Size = UDim2New(1, -16, 1, -12),
+            TextSize = 13
         })  InputBox:AddToTheme({TextColor3 = "Text"})
 
         local ActionButton = Instances:Create("TextButton", {
@@ -1098,23 +1063,24 @@ local Library do
             Name = "\0",
             FontFace = Library.Font,
             AutoButtonColor = false,
-            Text = Mode == "Import" and "Import" or "Copy",
+            Text = "Copy",
             TextColor3 = FromRGB(222, 236, 248),
             AnchorPoint = Vector2New(0, 1),
-            Position = UDim2New(0, 14, 1, -14),
-            Size = UDim2New(1, -28, 0, 32),
+            Position = UDim2New(0, 10, 1, -8),
+            Size = UDim2New(1, -20, 0, 28),
             BorderSizePixel = 2,
             BorderColor3 = FromRGB(12, 12, 12),
             BackgroundColor3 = FromRGB(58, 138, 224),
-            TextSize = 13,
-            ZIndex = 1002
+            TextSize = 12
         })  ActionButton:AddToTheme({BackgroundColor3 = "Accent", BorderColor3 = "Border"})
 
-        local function Destroy()
-            Overlay.Instance:Destroy()
+        local CurrentMode, CurrentCallback
+
+        local function Hide()
+            Box.Instance.Visible = false
         end
 
-        CloseButton:Connect("MouseButton1Click", Destroy)
+        CloseButton:Connect("MouseButton1Click", Hide)
 
         -- Interactive click feedback: swap label + flash colour so the user
         -- can see their click actually registered, then restore after a beat.
@@ -1124,7 +1090,6 @@ local Library do
             ActionBusy = true
 
             local OriginalText = ActionButton.Instance.Text
-            local OriginalColor = Library.Theme.Accent
 
             ActionButton.Instance.Text = FeedbackText
             ActionButton:ChangeItemTheme({BackgroundColor3 = "Element"})
@@ -1134,19 +1099,18 @@ local Library do
                 if ActionButton.Instance and ActionButton.Instance.Parent then
                     ActionButton.Instance.Text = OriginalText
                     ActionButton:ChangeItemTheme({BackgroundColor3 = "Accent"})
-                    ActionButton:Tween(nil, {BackgroundColor3 = OriginalColor})
+                    ActionButton:Tween(nil, {BackgroundColor3 = Library.Theme.Accent})
                 end
                 ActionBusy = false
             end)
         end
 
         ActionButton:Connect("MouseButton1Click", function()
-            if Mode == "Import" then
+            if CurrentMode == "Import" then
                 FlashAction("Imported!")
-                if Callback then
-                    Callback(InputBox.Instance.Text)
+                if CurrentCallback then
+                    CurrentCallback(InputBox.Instance.Text)
                 end
-                task.delay(0.9, Destroy)
             else
                 if setclipboard then
                     pcall(setclipboard, InputBox.Instance.Text)
@@ -1158,7 +1122,26 @@ local Library do
             end
         end)
 
-        return Overlay
+        local BoxHandle = { Instance = Box }
+
+        function BoxHandle:Show(Title, Mode, PresetText, Callback)
+            CurrentMode = Mode
+            CurrentCallback = Callback
+
+            TitleLabel.Instance.Text = Title
+            InputBox.Instance.Text = PresetText or ""
+            InputBox.Instance.PlaceholderText = Mode == "Import" and "Paste your config here..." or ""
+            InputBox.Instance.TextEditable = Mode == "Import"
+            ActionButton.Instance.Text = Mode == "Import" and "Import" or "Copy"
+
+            Box.Instance.Visible = true
+        end
+
+        function BoxHandle:Hide()
+            Hide()
+        end
+
+        return BoxHandle
     end
 
     Library.RefreshConfigsList = function(self, Element)
@@ -5689,6 +5672,21 @@ end)
             )
         end
 
+        -- [Feature: Multi-instance Safety] Same creator + title + game re-running
+        -- this script replaces its own previous window; other hubs are untouched.
+        do
+            local InstanceKey = tostring(Window.DevName) .. "::" .. tostring(Window.Title ~= "" and Window.Title or "Script") .. "::" .. tostring(game.PlaceId)
+            local Registry = getgenv().Adytum_Instances
+
+            if Registry[InstanceKey] then
+                pcall(Registry[InstanceKey])
+            end
+
+            Registry[InstanceKey] = function()
+                Library:Unload()
+            end
+        end
+
         -- Store window metadata in Library so CreateSettingsPage can access it
         Library.TitleText        = Window.Title
         Library.TitlePosition    = Window.TitlePosition
@@ -5823,8 +5821,6 @@ end)
             -- Minimise / restore
             do
                 local FullSize = Window.Size
-                local OriginalTopbarTitleText    = Items["TopbarTitle"].Instance.Text
-                local OriginalTopbarTitleVisible = Items["TopbarTitle"].Instance.Visible
 
                 Items["MinimizeBtn"]:Connect("MouseButton1Down", function()
                     Window.IsMinimized = not Window.IsMinimized
@@ -5837,13 +5833,6 @@ end)
                         if Items["ResizeButton"] then
                             Items["ResizeButton"].Instance.Visible = false
                         end
-
-                        -- The Side panel (and the profile block inside it) is
-                        -- sized relative to the window and collapses to ~0
-                        -- height once minimized, so surface the username in
-                        -- the topbar itself instead of letting it disappear.
-                        Items["TopbarTitle"].Instance.Visible = true
-                        Items["TopbarTitle"].Instance.Text = LocalPlayer.Name .. " (" .. tostring(LocalPlayer.UserId) .. ")"
                     else
                         Items["Window"].Instance:TweenSize(
                             FullSize,
@@ -5853,9 +5842,6 @@ end)
                         if Items["ResizeButton"] then
                             Items["ResizeButton"].Instance.Visible = true
                         end
-
-                        Items["TopbarTitle"].Instance.Text    = OriginalTopbarTitleText
-                        Items["TopbarTitle"].Instance.Visible = OriginalTopbarTitleVisible
                     end
                 end)
 
@@ -6871,12 +6857,14 @@ end)
                     -- [Feature: Config Export] Theme export/import (dev-togglable)
                     if Library.AllowConfigExport then
                         local ExportImportButton = ConfigsSection:Button()
+                        local ConfigBox = Library:BuildInlineConfigBox(ConfigsSection.Items["Content"].Instance)
+
                         ExportImportButton:Add("Export Config", function()
                             local ThemeJson = Library:GetThemeConfig()
-                            Library:OpenConfigBox("Export Config", "Export", ThemeJson)
+                            ConfigBox:Show("Export Config", "Export", ThemeJson)
                         end)
                         ExportImportButton:Add("Import Config", function()
-                            Library:OpenConfigBox("Import Config", "Import", nil, function(Text)
+                            ConfigBox:Show("Import Config", "Import", nil, function(Text)
                                 if Text == nil or Text == "" then
                                     Library:Notification("Error", "Please paste a config first", 5)
                                     return
