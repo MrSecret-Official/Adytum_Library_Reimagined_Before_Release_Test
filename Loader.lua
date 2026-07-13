@@ -1591,7 +1591,7 @@ local Library do
                         PaddingLeft = UDimNew(0, 7)
                     })
 
-                    Instances:Create("UIListLayout", {
+                    local SubPagesListLayout = Instances:Create("UIListLayout", {
                         Parent = Items["SubPages"].Instance,
                         Name = "\0",
                         VerticalAlignment = Enum.VerticalAlignment.Center,
@@ -1603,9 +1603,17 @@ local Library do
                     if SubPagesMode == "Auto" then
                         -- Only the horizontal size is ever driven automatically
                         -- here; the bar's height always stays fixed at 35.
+                        --
+                        -- We measure content width off the UIListLayout's own
+                        -- AbsoluteContentSize rather than the ScrollingFrame's
+                        -- CanvasSize/AutomaticCanvasSize. The latter is computed
+                        -- from the former on a later step, so listening to
+                        -- CanvasSize instead can end up one layout pass further
+                        -- behind (and in some cases never catch up before the
+                        -- rest of the script has already added every subpage).
                         local function UpdateSubPagesBarWidth()
                             local MaxWidth = Items["Page"].Instance.AbsoluteSize.X
-                            local ContentWidth = Items["SubPages"].Instance.CanvasSize.X.Offset
+                            local ContentWidth = SubPagesListLayout.Instance.AbsoluteContentSize.X + 14 -- + left/right UIPadding
 
                             -- The page frame can briefly report an AbsoluteSize of 0
                             -- before the engine finishes its first layout pass (or in
@@ -1620,12 +1628,12 @@ local Library do
 
                         -- Exposed so WindowSubPage can force a recompute right after
                         -- each subpage button is added, instead of relying only on
-                        -- CanvasSize/AbsoluteSize change signals (which can lag a
-                        -- frame behind, or in rare cases not fire before the rest of
-                        -- the calling script has already finished adding subpages).
+                        -- change signals (which can lag a frame behind, or in rare
+                        -- cases not fire before the rest of the calling script has
+                        -- already finished adding subpages).
                         Items["UpdateSubPagesBarWidth"] = UpdateSubPagesBarWidth
 
-                        Library:Connect(Items["SubPages"].Instance:GetPropertyChangedSignal("CanvasSize"), UpdateSubPagesBarWidth)
+                        Library:Connect(SubPagesListLayout.Instance:GetPropertyChangedSignal("AbsoluteContentSize"), UpdateSubPagesBarWidth)
                         Library:Connect(Items["Page"].Instance:GetPropertyChangedSignal("AbsoluteSize"), UpdateSubPagesBarWidth)
 
                         UpdateSubPagesBarWidth()
