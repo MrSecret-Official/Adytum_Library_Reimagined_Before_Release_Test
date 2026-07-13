@@ -520,18 +520,32 @@ local Library do
 
             local ResizeButton = Instances:Create("ImageButton", {
 				Parent = Gui,
-                Image = "rbxassetid://",
+                Image = "",
 				AnchorPoint = Vector2New(1, 1),
 				BorderColor3 = FromRGB(0, 0, 0),
-				Size = UDim2New(0, 6, 0, 6),
-				Position = UDim2New(1, -4, 1, -4),
+				Size = UDim2New(0, 14, 0, 14),
+				Position = UDim2New(1, -3, 1, -3),
                 Name = "\0",
 				BorderSizePixel = 0,
-				BackgroundTransparency = 1,
-                ZIndex = 5,
+				BackgroundTransparency = 0.35,
+                BackgroundColor3 = FromRGB(255, 255, 255),
+                ZIndex = 999,
 				AutoButtonColor = false,
                 Visible = true,
-			})  ResizeButton:AddToTheme({ImageColor3 = "Accent"})
+			})  ResizeButton:AddToTheme({BackgroundColor3 = "Accent"})
+
+            Instances:Create("UICorner", {
+                Parent = ResizeButton.Instance,
+                Name = "\0",
+                CornerRadius = UDimNew(0, 3),
+            })
+
+            ResizeButton:OnHover(function()
+                ResizeButton.Instance.BackgroundTransparency = 0.05
+            end)
+            ResizeButton:OnHoverLeave(function()
+                ResizeButton.Instance.BackgroundTransparency = 0.35
+            end)
 
             local InputChanged
 
@@ -594,19 +608,29 @@ local Library do
             -- automatically follow the window's position/size with no
             -- RenderStepped tracking needed.
             local function MakeStrip(Position, Size, AnchorPoint)
-                return Instances:Create("TextButton", {
+                local Strip = Instances:Create("TextButton", {
                     Parent = Gui,
                     Name = "\0",
                     AnchorPoint = AnchorPoint,
                     Position = Position,
                     Size = Size,
-                    BackgroundTransparency = 1,
+                    BackgroundTransparency = 0.85,
+                    BackgroundColor3 = FromRGB(255, 255, 255),
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
                     ZIndex = 999,
                     Active = true,
-                })
+                })  Strip:AddToTheme({BackgroundColor3 = "Accent"})
+
+                Strip:OnHover(function()
+                    Strip.Instance.BackgroundTransparency = 0.4
+                end)
+                Strip:OnHoverLeave(function()
+                    Strip.Instance.BackgroundTransparency = 0.85
+                end)
+
+                return Strip
             end
 
             local StripRight = MakeStrip(UDim2New(1, Gap, 0, 0), UDim2New(0, HandleThickness, 1, 0), Vector2New(0, 0))
