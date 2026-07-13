@@ -7083,10 +7083,9 @@ end)
         local SettingsPage = Window:Page({Name = "Settings", SubPages = true, PinLast = true}) do 
             local ThemingSubPage = SettingsPage:SubPage({Name = "Theming", Columns = 2}) do 
                 -- [Feature: Advanced Theming] Sections revealed/hidden by the
-                -- "Advanced Mode" toggle below. Populated once each section
-                -- is built further down; starts empty since the toggle's
-                -- own Callback fires (with its Default) before either
-                -- Section exists yet.
+                -- "Advanced Mode" toggle. Populated once each advanced section
+                -- is built; starts empty since the toggle's Callback fires
+                -- (with its Default=false) before the sections exist yet.
                 local AdvancedThemingSections = { }
                 local function SetAdvancedThemingVisible(Bool)
                     for _, Section in AdvancedThemingSections do
@@ -7094,27 +7093,20 @@ end)
                     end
                 end
 
-                -- Upvalue so the colorpicker callbacks (ColorsSection, Side=2)
-                -- can still flip the dropdown to "Custom".
+                -- Upvalue so colorpicker callbacks can flip the dropdown to "Custom".
                 local PresetDropdown
 
-                -- [Feature: Layout] Side=1 (LEFT column):
-                --   1. ThemesSection  -- Advanced Mode toggle + Preset dropdown
-                --   2. ThemesListSection  -- (advanced) saved-themes CRUD list
-                -- Side=2 (RIGHT column):
-                --   1. ColorsSection  -- per-colour colorpickers
-                --   2. ExportImportThemeSection  -- (advanced) export/import box
-                --
-                -- This keeps the themes list at the TOP of the left column so
-                -- it visually sits above (and beside) the export/import section
-                -- on the right, exactly as the user specified.
+                -- ── TARGET LAYOUT ──────────────────────────────────────────
+                -- Side=1 LEFT  (always visible):
+                --   1. ThemesSection  ← Advanced Mode toggle + Preset dropdown
+                --   2. ColorsSection  ← per-colour colorpickers
+                -- Side=2 RIGHT (advanced-mode only):
+                --   1. ThemesListSection        ← saved-themes CRUD
+                --   2. ExportImportThemeSection ← Import as textbox + big box
 
-                -- ── LEFT COLUMN ────────────────────────────────────────────
+                -- ── LEFT COLUMN ─────────────────────────────────────────────
 
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
-
-                    -- [Feature: Advanced Theming] Dev-gated switch revealing
-                    -- theme export/import + the saved-themes list below.
                     if Library.AllowAdvancedTheming then
                         ThemesSection:Toggle({
                             Name = "Advanced Mode",
@@ -7126,17 +7118,13 @@ end)
                         })
                     end
 
-                    -- [Feature: Theme Presets] Preset picker (hidden when AllowThemePresets = false)
                     if Library.AllowThemePresets then
                         local PresetNames = { }
                         for Name in Library.ThemePresets do
                             TableInsert(PresetNames, Name)
                         end
-                        -- [Feature: Custom Theme] Always present so manually
-                        -- recoloring anything (in ColorsSection below) can flip
-                        -- the dropdown to "Custom" via Dropdown:Set, which only
-                        -- works if the option already exists in the Items it
-                        -- was built with.
+                        -- "Custom" always present so colorpicker callbacks can
+                        -- call PresetDropdown:Set("Custom") reliably.
                         TableInsert(PresetNames, "Custom")
 
                         PresetDropdown = ThemesSection:Dropdown({
@@ -7147,20 +7135,12 @@ end)
                             Callback = function(Value)
                                 if not Value then return end
 
-                                -- Dropdown:Set(Data.Default) fires this same
-                                -- Callback once on creation with the current
-                                -- preset; skip that so the notification only
-                                -- shows on an actual user-driven change. Also
-                                -- catches the Dropdown:Set("Custom") call
-                                -- below firing its own Callback right back.
+                                -- Skip the initial fire on construction and
+                                -- the re-fire when Set("Custom") is called.
                                 if Value == Library.ActivePreset then
                                     return
                                 end
 
-                                -- [Feature: Custom Theme] "Custom" has no
-                                -- registered colours to apply -- the current
-                                -- colours already ARE the custom theme, so
-                                -- just persist the label change.
                                 if Value == "Custom" then
                                     Library.ActivePreset = "Custom"
                                     Library:SaveActivePreset("Custom")
@@ -7169,7 +7149,6 @@ end)
                                 end
 
                                 Library:SetThemePreset(Value)
-                                -- Refresh the colorpicker UIs to reflect the new preset
                                 Library:RefreshThemeColorpickers()
                                 Library:SaveActivePreset(Value)
                                 Library:Notification("Success", "Preset theme saved automatically", 3)
@@ -7178,37 +7157,23 @@ end)
                     end
                 end
 
-                -- [Feature: Advanced Theming] Saved-themes list + CRUD buttons.
-                -- Placed on Side=1 so it appears in the LEFT column, directly
-                -- below ThemesSection (compact: only toggle + dropdown), which
-                -- means the list sits at the top-left and is vertically aligned
-                -- with (and above) ExportImportThemeSection on the right.
-                -- Only create/delete/save/load/autoload are available in
-                -- advanced mode per spec.
-                -- ── RIGHT COLUMN ───────────────────────────────────────────
-
-                -- [Feature: Theme Colors] Per-colour colorpickers on Side=2
-                -- (right column). Created FIRST on Side=2 so they appear at
-                -- the top of the right column, above ExportImportThemeSection.
-                -- Each callback flips the preset dropdown to "Custom" and
-                -- auto-saves in real time.
-                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 2}) do
-                    for Index, Value in Library.Theme do 
+                -- Colors section: per-colour colorpickers on Side=1 (LEFT),
+                -- directly below ThemesSection. Always visible (not advanced-gated).
+                -- Each callback flips the preset dropdown to "Custom" in real time.
+                local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 1}) do
+                    for Index, Value in Library.Theme do
                         ColorsSection:Label(Index):Colorpicker({
                             Name = Index,
-                            Flag = Index.."Theme",
+                            Flag = Index .. "Theme",
                             Default = Value,
                             Callback = function(Value)
-                                -- Suppressed during batch refresh (preset switch
-                                -- or autoload) so we don't re-flip to "Custom".
+                                -- Suppressed during batch refresh so preset
+                                -- dropdown doesn't re-flip to "Custom".
                                 if Library._SuppressThemeCallbacks then return end
 
                                 Library.Theme[Index] = Value
                                 Library:ChangeTheme(Index, Value)
 
-                                -- [Feature: Custom Theme] Any manual recolor
-                                -- flips the preset dropdown to "Custom" and
-                                -- persists the full theme in real time.
                                 Library.ActivePreset = "Custom"
                                 if PresetDropdown then
                                     PresetDropdown:Set("Custom")
@@ -7220,13 +7185,16 @@ end)
                     end
                 end
 
+                -- ── RIGHT COLUMN (advanced only) ───────────────────────────
+
                 if Library.AllowAdvancedTheming then
                     local ThemeSelected
                     local ThemeName
                     local UpdateThemeSelectionButtons
                     local ThemesSearchbox
 
-                    local ThemesListSection = ThemingSubPage:Section({Name = "Saved Themes", Side = 1}) do
+                    -- Saved Themes CRUD list: Side=2 (RIGHT column, top).
+                    local ThemesListSection = ThemingSubPage:Section({Name = "Saved Themes", Side = 2}) do
                         ThemesSearchbox = ThemesListSection:Searchbox({
                             Name = "SearchboxThemes",
                             Flag = "ThemesSearchbox",
@@ -7254,10 +7222,10 @@ end)
                             if ThemeName and ThemeName ~= "" then
                                 if not isfile(Library.Folders.Themes .. "/" .. ThemeName .. ".json") then
                                     writefile(Library.Folders.Themes .. "/" .. ThemeName .. ".json", Library:GetThemeConfig())
-                                    Library:Notification("Success", "Created theme "..ThemeName .. " succesfully", 5)
+                                    Library:Notification("Success", "Created theme " .. ThemeName .. " succesfully", 5)
                                     Library:RefreshThemesList(ThemesSearchbox)
                                 else
-                                    Library:Notification("Error", "Theme with the name "..ThemeName .. " already exists", 5)
+                                    Library:Notification("Error", "Theme with the name " .. ThemeName .. " already exists", 5)
                                     return
                                 end
                             end
@@ -7266,7 +7234,7 @@ end)
                         local DeleteButton = CreateAndDeleteButton:Add("Delete", function()
                             if ThemeSelected then
                                 Library:DeleteTheme(ThemeSelected)
-                                Library:Notification("Success", "Deleted theme "..ThemeSelected .. " succesfully", 5)
+                                Library:Notification("Success", "Deleted theme " .. ThemeSelected .. " succesfully", 5)
                                 ThemeSelected = nil
                                 UpdateThemeSelectionButtons()
                                 Library:RefreshThemesList(ThemesSearchbox)
@@ -7275,22 +7243,17 @@ end)
 
                         local LoadAndSaveButton = ThemesListSection:Button()
 
-                        -- [Feature: Custom Theme] Loading a saved .json theme
-                        -- does NOT autosave (no AutoSave flag) -- the loaded
-                        -- colours are applied visually but the active-preset
-                        -- persistence is left untouched. Only autoloaded themes
-                        -- persist automatically (see startup block below).
+                        -- Manual load: no AutoSave, stays ephemeral.
+                        -- Only autoloaded [AT] themes persist on startup.
                         local LoadButton = LoadAndSaveButton:Add("Load", function()
                             if ThemeSelected then
                                 local Ok, Err = Library:LoadThemeConfig(
                                     readfile(Library.Folders.Themes .. "/" .. ThemeSelected)
-                                    -- no AutoSave: manual load stays ephemeral
                                 )
-
                                 if Ok then
-                                    Library:Notification("Success", "Loaded theme "..ThemeSelected .. " succesfully", 5)
+                                    Library:Notification("Success", "Loaded theme " .. ThemeSelected .. " succesfully", 5)
                                 else
-                                    Library:Notification("Error", "Failed to load theme "..ThemeSelected .. " report this to the devs:\n"..tostring(Err), 5)
+                                    Library:Notification("Error", "Failed to load theme " .. ThemeSelected .. " report this to the devs:\n" .. tostring(Err), 5)
                                 end
                             end
                         end)
@@ -7302,7 +7265,7 @@ end)
                             end
                             if targetTheme then
                                 writefile(Library.Folders.Themes .. "/" .. targetTheme, Library:GetThemeConfig())
-                                Library:Notification("Success", "Saved theme "..targetTheme:gsub("%.json$", "").." succesfully", 5)
+                                Library:Notification("Success", "Saved theme " .. targetTheme:gsub("%.json$", "") .. " succesfully", 5)
                                 Library:RefreshThemesList(ThemesSearchbox)
                             else
                                 Library:Notification("Error", "Please enter a name or select a theme to save", 5)
@@ -7345,13 +7308,9 @@ end)
                     end
                     TableInsert(AdvancedThemingSections, ThemesListSection)
 
-                    -- [Feature: Theme Export] Export/Import of the current theme
-                    -- colours. Lives on Side=2 (RIGHT column), BELOW ColorsSection
-                    -- (which was created first on Side=2 above). Mirrors the Config
-                    -- export/import pattern: the "Import as" textbox saves the pasted
-                    -- JSON to disk so it appears in the Saved Themes list immediately.
-                    -- ThemesSearchbox is in scope since both sections share the
-                    -- same AllowAdvancedTheming block.
+                    -- Export/Import Theme: Side=2 (RIGHT column, below ThemesListSection).
+                    -- "Import as" textbox saves the pasted JSON to disk so it
+                    -- appears in the Saved Themes list (mirrors Config export/import).
                     local ImportThemeName
 
                     local ExportImportThemeSection = ThemingSubPage:Section({Name = "Export / Import Theme", Side = 2}) do
@@ -7398,7 +7357,6 @@ end)
                                 return
                             end
 
-                            -- Validate JSON before touching disk
                             local DecodeOk = pcall(HttpService.JSONDecode, HttpService, Text)
                             if not DecodeOk then
                                 Library:Notification("Error", "Import failed: pasted text isn't valid JSON", 5)
@@ -7414,7 +7372,6 @@ end)
 
                             writefile(Library.Folders.Themes .. "/" .. FileName, Text)
                             Library:Notification("Success", "Imported theme " .. ImportThemeName .. " successfully", 5)
-                            -- ThemesSearchbox is in scope: refresh the list immediately
                             Library:RefreshThemesList(ThemesSearchbox)
                         end)
 
@@ -7424,9 +7381,7 @@ end)
                     end
                     TableInsert(AdvancedThemingSections, ExportImportThemeSection)
 
-                    -- Hidden until the user actually flips Advanced Mode on
-                    -- (Default = false above; both Sections default Visible
-                    -- so this has to be set explicitly post-creation).
+                    -- Hidden until user flips Advanced Mode on.
                     SetAdvancedThemingVisible(false)
                 end
 
