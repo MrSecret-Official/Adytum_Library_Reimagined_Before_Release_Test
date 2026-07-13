@@ -293,6 +293,23 @@ local Library do
         end
     end
 
+    -- [Feature: Theme Presets] Auto-saved preset choice. Selecting a preset in
+    -- the dropdown persists it here immediately (no manual "save"/"create config"
+    -- step needed) and it's restored automatically on the next load.
+    Library.ActivePresetFile = Library.Folders.Directory .. "/ActivePreset.txt"
+
+    Library.SaveActivePreset = function(self, Name)
+        pcall(writefile, self.ActivePresetFile, Name)
+    end
+
+    if isfile(Library.ActivePresetFile) then
+        local Ok, SavedName = pcall(readfile, Library.ActivePresetFile)
+        if Ok and SavedName and Library.ThemePresets[SavedName] then
+            Library.ActivePreset = SavedName
+            Library.Theme = TableClone(Library.ThemePresets[SavedName])
+        end
+    end
+
     -- Images
     for Index, Value in Library.Images do 
         local ImageData = Value
@@ -978,7 +995,7 @@ local Library do
             Name = "\0",
             AnchorPoint = Vector2New(0.5, 0.5),
             Position = UDim2New(0.5, 0, 0.5, 0),
-            Size = UDim2New(0, 360, 0, 260),
+            Size = UDim2New(0, 480, 0, 380),
             BorderSizePixel = 2,
             BorderColor3 = FromRGB(12, 12, 12),
             BackgroundColor3 = FromRGB(6, 12, 20),
@@ -998,14 +1015,29 @@ local Library do
             Text = Title,
             TextColor3 = FromRGB(222, 236, 248),
             TextXAlignment = Enum.TextXAlignment.Left,
-            Position = UDim2New(0, 12, 0, 10),
-            Size = UDim2New(1, -24, 0, 18),
+            Position = UDim2New(0, 14, 0, 12),
+            Size = UDim2New(1, -28, 0, 20),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            TextSize = 13,
+            TextSize = 15,
             ZIndex = 1002
         })  TitleLabel:AddToTheme({TextColor3 = "Text"})
         TitleLabel:TextBorder()
+
+        local SubtitleLabel = Instances:Create("TextLabel", {
+            Parent = Box.Instance,
+            Name = "\0",
+            FontFace = Library.Font,
+            Text = Mode == "Import" and "Paste a config below and press Import" or "Copy the config below to share your theme",
+            TextColor3 = FromRGB(138, 160, 184),
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Position = UDim2New(0, 14, 0, 32),
+            Size = UDim2New(1, -28, 0, 14),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            TextSize = 11,
+            ZIndex = 1002
+        })  SubtitleLabel:AddToTheme({TextColor3 = "Placeholder Text"})
 
         local CloseButton = Instances:Create("TextButton", {
             Parent = Box.Instance,
@@ -1026,18 +1058,23 @@ local Library do
         local InputBackground = Instances:Create("Frame", {
             Parent = Box.Instance,
             Name = "\0",
-            Position = UDim2New(0, 12, 0, 36),
-            Size = UDim2New(1, -24, 1, -84),
+            Position = UDim2New(0, 14, 0, 54),
+            Size = UDim2New(1, -28, 1, -108),
             BorderSizePixel = 2,
             BorderColor3 = FromRGB(12, 12, 12),
             BackgroundColor3 = FromRGB(12, 22, 36),
             ZIndex = 1002
         })  InputBackground:AddToTheme({BackgroundColor3 = "Inline", BorderColor3 = "Outline"})
 
+        local InputCorner = InstanceNew("UICorner")
+        InputCorner.Name = "\0"
+        InputCorner.CornerRadius = UDimNew(0, 4)
+        InputCorner.Parent = InputBackground.Instance
+
         local InputBox = Instances:Create("TextBox", {
             Parent = InputBackground.Instance,
             Name = "\0",
-            FontFace = Library.Font,
+            FontFace = Enum.Font.Code, -- monospace: aligns JSON quotes/braces, far easier to read
             Text = PresetText or "",
             PlaceholderText = Mode == "Import" and "Paste your config here..." or "",
             MultiLine = true,
@@ -1050,9 +1087,9 @@ local Library do
             PlaceholderColor3 = FromRGB(138, 160, 184),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            Position = UDim2New(0, 8, 0, 6),
-            Size = UDim2New(1, -16, 1, -12),
-            TextSize = 11,
+            Position = UDim2New(0, 10, 0, 8),
+            Size = UDim2New(1, -20, 1, -16),
+            TextSize = 14,
             ZIndex = 1003
         })  InputBox:AddToTheme({TextColor3 = "Text"})
 
@@ -1064,12 +1101,12 @@ local Library do
             Text = Mode == "Import" and "Import" or "Copy",
             TextColor3 = FromRGB(222, 236, 248),
             AnchorPoint = Vector2New(0, 1),
-            Position = UDim2New(0, 12, 1, -12),
-            Size = UDim2New(1, -24, 0, 28),
+            Position = UDim2New(0, 14, 1, -14),
+            Size = UDim2New(1, -28, 0, 32),
             BorderSizePixel = 2,
             BorderColor3 = FromRGB(12, 12, 12),
             BackgroundColor3 = FromRGB(58, 138, 224),
-            TextSize = 12,
+            TextSize = 13,
             ZIndex = 1002
         })  ActionButton:AddToTheme({BackgroundColor3 = "Accent", BorderColor3 = "Border"})
 
@@ -1079,15 +1116,41 @@ local Library do
 
         CloseButton:Connect("MouseButton1Click", Destroy)
 
+        -- Interactive click feedback: swap label + flash colour so the user
+        -- can see their click actually registered, then restore after a beat.
+        local ActionBusy = false
+        local function FlashAction(FeedbackText)
+            if ActionBusy then return end
+            ActionBusy = true
+
+            local OriginalText = ActionButton.Instance.Text
+            local OriginalColor = Library.Theme.Accent
+
+            ActionButton.Instance.Text = FeedbackText
+            ActionButton:ChangeItemTheme({BackgroundColor3 = "Element"})
+            ActionButton:Tween(nil, {BackgroundColor3 = FromRGB(70, 180, 110)})
+
+            task.delay(0.9, function()
+                if ActionButton.Instance and ActionButton.Instance.Parent then
+                    ActionButton.Instance.Text = OriginalText
+                    ActionButton:ChangeItemTheme({BackgroundColor3 = "Accent"})
+                    ActionButton:Tween(nil, {BackgroundColor3 = OriginalColor})
+                end
+                ActionBusy = false
+            end)
+        end
+
         ActionButton:Connect("MouseButton1Click", function()
             if Mode == "Import" then
+                FlashAction("Imported!")
                 if Callback then
                     Callback(InputBox.Instance.Text)
                 end
-                Destroy()
+                task.delay(0.9, Destroy)
             else
                 if setclipboard then
                     pcall(setclipboard, InputBox.Instance.Text)
+                    FlashAction("Copied!")
                     Library:Notification("Success", "Config copied to clipboard", 3)
                 else
                     Library:Notification("Error", "Your executor doesn't support setclipboard", 3)
@@ -1203,13 +1266,25 @@ local Library do
         end
     end
 
-    -- [Feature: Config Export] Serialise current theme colours to JSON
+    -- [Feature: Config Export] Serialise current theme colours to JSON.
+    -- Pretty-printed (one "Key": "Value" pair per line, sorted alphabetically)
+    -- so it's actually readable in the export box instead of one dense line.
     Library.GetThemeConfig = function(self)
-        local ThemeData = { }
-        for Key, Color in self.Theme do
-            ThemeData[Key] = "#" .. Color:ToHex()
+        local Keys = { }
+        for Key in self.Theme do
+            TableInsert(Keys, Key)
         end
-        return HttpService:JSONEncode(ThemeData)
+        table.sort(Keys)
+
+        local Lines = { "{" }
+        for Index, Key in ipairs(Keys) do
+            local HexValue = "#" .. self.Theme[Key]:ToHex()
+            local Comma = Index < #Keys and "," or ""
+            TableInsert(Lines, string.format('    "%s": "%s"%s', Key, HexValue, Comma))
+        end
+        TableInsert(Lines, "}")
+
+        return table.concat(Lines, "\n")
     end
 
     -- [Feature: Config Export] Load theme colours from a JSON string
@@ -5748,6 +5823,8 @@ end)
             -- Minimise / restore
             do
                 local FullSize = Window.Size
+                local OriginalTopbarTitleText    = Items["TopbarTitle"].Instance.Text
+                local OriginalTopbarTitleVisible = Items["TopbarTitle"].Instance.Visible
 
                 Items["MinimizeBtn"]:Connect("MouseButton1Down", function()
                     Window.IsMinimized = not Window.IsMinimized
@@ -5760,6 +5837,13 @@ end)
                         if Items["ResizeButton"] then
                             Items["ResizeButton"].Instance.Visible = false
                         end
+
+                        -- The Side panel (and the profile block inside it) is
+                        -- sized relative to the window and collapses to ~0
+                        -- height once minimized, so surface the username in
+                        -- the topbar itself instead of letting it disappear.
+                        Items["TopbarTitle"].Instance.Visible = true
+                        Items["TopbarTitle"].Instance.Text = LocalPlayer.Name .. " (" .. tostring(LocalPlayer.UserId) .. ")"
                     else
                         Items["Window"].Instance:TweenSize(
                             FullSize,
@@ -5769,6 +5853,9 @@ end)
                         if Items["ResizeButton"] then
                             Items["ResizeButton"].Instance.Visible = true
                         end
+
+                        Items["TopbarTitle"].Instance.Text    = OriginalTopbarTitleText
+                        Items["TopbarTitle"].Instance.Visible = OriginalTopbarTitleVisible
                     end
                 end)
 
@@ -6659,6 +6746,8 @@ end)
                             Callback = function(Value)
                                 if Value then
                                     Library:SetThemePreset(Value)
+                                    Library:SaveActivePreset(Value)
+                                    Library:Notification("Success", "Preset theme saved automatically", 3)
                                 end
                             end
                         })
