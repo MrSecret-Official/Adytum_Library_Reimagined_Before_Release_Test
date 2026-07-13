@@ -2175,6 +2175,14 @@ local Library do
                     SubItems["NewButton"].Instance.Visible = Bool
                 end
 
+                -- Greys the label out when there's nothing to act on (e.g. no
+                -- config selected) and turns it back to normal text color
+                -- once there is, as a visual cue rather than just failing silently.
+                function NewButton:SetEnabled(Bool)
+                    SubItems["Text"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
+                    SubItems["Text"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
+                end
+
                 local PageSearchData = Library.SearchItems[Data.Page]
 
                 if PageSearchData then
@@ -5833,6 +5841,14 @@ end)
                         if Items["ResizeButton"] then
                             Items["ResizeButton"].Instance.Visible = false
                         end
+
+                        -- Side (tabs + profile) and Content (pages: Settings,
+                        -- Credits, Configs...) are sized relative to the window
+                        -- and go negative once it shrinks to 30px, which used
+                        -- to leave a sliver of the profile visible and broke
+                        -- the pages inside. Just hide them outright instead.
+                        Items["Side"].Instance.Visible = false
+                        Items["Content"].Instance.Visible = false
                     else
                         Items["Window"].Instance:TweenSize(
                             FullSize,
@@ -5842,6 +5858,9 @@ end)
                         if Items["ResizeButton"] then
                             Items["ResizeButton"].Instance.Visible = true
                         end
+
+                        Items["Side"].Instance.Visible = true
+                        Items["Content"].Instance.Visible = true
                     end
                 end)
 
@@ -6730,11 +6749,19 @@ end)
                             Items = PresetNames,
                             Default = Library.ActivePreset,
                             Callback = function(Value)
-                                if Value then
-                                    Library:SetThemePreset(Value)
-                                    Library:SaveActivePreset(Value)
-                                    Library:Notification("Success", "Preset theme saved automatically", 3)
+                                if not Value then return end
+
+                                -- Dropdown:Set(Data.Default) fires this same
+                                -- Callback once on creation with the current
+                                -- preset; skip that so the notification only
+                                -- shows on an actual user-driven change.
+                                if Value == Library.ActivePreset then
+                                    return
                                 end
+
+                                Library:SetThemePreset(Value)
+                                Library:SaveActivePreset(Value)
+                                Library:Notification("Success", "Preset theme saved automatically", 3)
                             end
                         })
                     end
@@ -6758,6 +6785,7 @@ end)
                 local ConfigsSection = ConfigsSubPage:Section({Name = "Configs", Side = 1}) do
                     local ConfigName
                     local ConfigSelected
+                    local UpdateSelectionDependentButtons -- forward declared; assigned once the buttons below exist
 
                     local ConfigsSearchbox = ConfigsSection:Searchbox({
                         Name = "SearchboxConfigs",
@@ -6766,6 +6794,7 @@ end)
                         Multi = false,
                         Callback = function(Value)
                             ConfigSelected = Value
+                            UpdateSelectionDependentButtons()
                         end
                     })
 
@@ -6794,17 +6823,19 @@ end)
                         end
                     end)
 
-                    CreateAndDeleteButton:Add("Delete", function()
+                    local DeleteButton = CreateAndDeleteButton:Add("Delete", function()
                         if ConfigSelected then
                             Library:DeleteConfig(ConfigSelected)
                             Library:Notification("Success", "Deleted config "..ConfigSelected .. " succesfully", 5)
+                            ConfigSelected = nil
+                            UpdateSelectionDependentButtons()
                             Library:RefreshConfigsList(ConfigsSearchbox)
                         end
                     end)
 
                     local LoadAndSaveButton = ConfigsSection:Button()    
 
-                    LoadAndSaveButton:Add("Load", function()
+                    local LoadButton = LoadAndSaveButton:Add("Load", function()
                         if ConfigSelected then
                             local Success, Result = Library:LoadConfig(readfile(Library.Folders.Configs .. "/" .. ConfigSelected))
 
@@ -6831,7 +6862,7 @@ end)
                     end)
 
                     local AutoloadButton = ConfigsSection:Button()
-                    AutoloadButton:Add("Set as Autoload [AT]", function()
+                    local AutoloadActionButton = AutoloadButton:Add("Set as Autoload [AT]", function()
                         local targetConfig = ConfigSelected
                         if targetConfig then
                             local oldPath = Library.Folders.Configs .. "/" .. targetConfig
@@ -6851,6 +6882,17 @@ end)
                             Library:Notification("Error", "Please select a config first", 5)
                         end
                     end)
+
+                    -- [Feature: Config selection feedback] Grey the label out
+                    -- when no config is selected, white once one is, instead
+                    -- of the buttons silently doing nothing when pressed.
+                    UpdateSelectionDependentButtons = function()
+                        local HasSelection = ConfigSelected ~= nil and ConfigSelected ~= ""
+                        DeleteButton:SetEnabled(HasSelection)
+                        LoadButton:SetEnabled(HasSelection)
+                        AutoloadActionButton:SetEnabled(HasSelection)
+                    end
+                    UpdateSelectionDependentButtons()
 
                     Library:RefreshConfigsList(ConfigsSearchbox)
 
