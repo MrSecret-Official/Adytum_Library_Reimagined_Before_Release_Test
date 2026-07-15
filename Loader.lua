@@ -161,6 +161,16 @@ local Library do
         -- dropdown in Settings (Small = 1, Medium = 1.2, Large = 1.3).
         NotificationScale = 1,
 
+        -- [Fix: Notification Compression] By default, notification text is
+        -- NOT affected by the global Font Size slider -- only by
+        -- NotificationScale above. This is a dev-only switch with no UI
+        -- exposure: set to false in the loading script to opt notifications
+        -- BACK into the FontScale registry (restoring the old, buggy-but-
+        -- sometimes-wanted behaviour where Font Size also scales
+        -- notifications). Left true, notifications stay stable regardless
+        -- of what the user does with Font Size.
+        NotificationsIgnoreFontScale = true,
+
         -- [Feature: UI Scale] Multiplier applied to the whole window via a
         -- UIScale instance (set on Library.WindowUIScale once the window is
         -- built). Kept in controlled 5% steps by the "UI Scale" slider.
@@ -591,7 +601,7 @@ local Library do
     local Instances = { } do
         Instances.__index = Instances
 
-        Instances.Create = function(self, Class, Properties)
+        Instances.Create = function(self, Class, Properties, SkipFontRegister)
             local NewItem = {
                 Instance = InstanceNew(Class),
                 Properties = Properties,
@@ -608,7 +618,19 @@ local Library do
             -- TextSize self-registers so the global Font Size slider can
             -- rescale it later. Applying the current FontScale immediately
             -- keeps behaviour identical to before when FontScale is 1.
-            if Properties.TextSize and (Class == "TextLabel" or Class == "TextButton" or Class == "TextBox") then
+            --
+            -- [Fix: Notification Compression] Notifications scale their own
+            -- TextSize by NotificationScale at creation time (see
+            -- Library.Notification). If they also self-register here, the
+            -- global Font Size slider re-scales that already-scaled value
+            -- on top of it -- double-applying two independent sliders and
+            -- fighting with the notification's own AutomaticSize/Clips
+            -- behaviour, which is what produced the squished/compressed
+            -- notification frames. Callers that manage their own text
+            -- scaling (like notifications) pass SkipFontRegister = true to
+            -- opt out, keeping Font Size genuinely independent of
+            -- Notification Size as intended.
+            if not SkipFontRegister and Properties.TextSize and (Class == "TextLabel" or Class == "TextButton" or Class == "TextBox") then
                 Library:RegisterFontItem(NewItem.Instance, Properties.TextSize)
             end
 
@@ -6384,7 +6406,11 @@ end)
                 AutomaticSize = Enum.AutomaticSize.XY,
                 TextSize = Library:Round(9 * Scale),
                 BackgroundColor3 = FromRGB(255, 255, 255)
-            })  Items["Title"]:AddToTheme({TextColor3 = "Text"})
+            }, Library.NotificationsIgnoreFontScale)  Items["Title"]:AddToTheme({TextColor3 = "Text"})
+            -- [Fix: Notification Compression] SkipFontRegister above follows
+            -- Library.NotificationsIgnoreFontScale (dev-only, hidden) -- true
+            -- by default, so this label's size is driven solely by
+            -- NotificationScale, not the global Font Size slider.
 
            Items["UIStroke2"] =  Items["Title"]:TextBorder()
 
@@ -6402,7 +6428,9 @@ end)
                 AutomaticSize = Enum.AutomaticSize.XY,
                 TextSize = Library:Round(9 * Scale),
                 BackgroundColor3 = FromRGB(255, 255, 255)
-            })  Items["Description"]:AddToTheme({TextColor3 = "Text"})
+            }, Library.NotificationsIgnoreFontScale)  Items["Description"]:AddToTheme({TextColor3 = "Text"})
+            -- [Fix: Notification Compression] Same as Title -- follows
+            -- Library.NotificationsIgnoreFontScale (dev-only, hidden).
 
             Items["UIStroke3"] = Items["Description"]:TextBorder()
 
