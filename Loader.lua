@@ -6404,6 +6404,7 @@ end)
                 TextXAlignment = Enum.TextXAlignment.Left,
                 BorderSizePixel = 0,
                 AutomaticSize = Enum.AutomaticSize.XY,
+                TextWrapped = true,
                 TextSize = Library:Round(9 * Scale),
                 BackgroundColor3 = FromRGB(255, 255, 255)
             }, Library.NotificationsIgnoreFontScale)  Items["Title"]:AddToTheme({TextColor3 = "Text"})
@@ -6426,6 +6427,7 @@ end)
                 TextXAlignment = Enum.TextXAlignment.Left,
                 BorderColor3 = FromRGB(0, 0, 0),
                 AutomaticSize = Enum.AutomaticSize.XY,
+                TextWrapped = true,
                 TextSize = Library:Round(9 * Scale),
                 BackgroundColor3 = FromRGB(255, 255, 255)
             }, Library.NotificationsIgnoreFontScale)  Items["Description"]:AddToTheme({TextColor3 = "Text"})
@@ -6433,6 +6435,13 @@ end)
             -- Library.NotificationsIgnoreFontScale (dev-only, hidden).
 
             Items["UIStroke3"] = Items["Description"]:TextBorder()
+
+            Instances:Create("UISizeConstraint", {
+                Parent = Items["Notification"].Instance,
+                Name = "\0",
+                MaxSize = Vector2.new(Library:Round(320 * Scale), math.huge),
+                MinSize = Vector2.new(Library:Round(200 * Scale), 0)
+            })
 
             -- [Fix: Notification UI Squashed Bug] Using manual Y positioning with Scale
             -- on Liner (Position = {0,0,1,8}) while Notification has AutomaticSize.XY
