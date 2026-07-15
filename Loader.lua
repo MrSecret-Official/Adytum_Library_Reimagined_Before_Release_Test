@@ -6261,7 +6261,12 @@ end)
             })  Items["LogoTitle"]:AddToTheme({TextColor3 = "Text"})
             Items["LogoTitle"]:TextBorder()
 
-            -- Helper called by Settings "Title Position" dropdown
+            -- Helper called by Settings "Title Position" dropdown. UpdatePagesLayout
+            -- is forward-declared and assigned once Items["Pages"] exists below,
+            -- since the tab list's top offset depends on whether the Logo title
+            -- is currently taking up space underneath the logo.
+            local UpdatePagesLayout
+
             local function ApplyTitlePosition(Position)
                 Library.TitlePosition = Position
                 if Position == "Topbar" then
@@ -6274,8 +6279,16 @@ end)
                     Items["TopbarTitle"].Instance.Visible = false
                     Items["LogoTitle"].Instance.Visible   = false
                 end
+
+                -- [Fix: Logo Title Overlap] The tab list used to start at a
+                -- fixed y=100 no matter what, so when TitlePosition == "Logo"
+                -- the title text (which sits right under the 75px logo) and
+                -- the first tab button overlapped. Recompute the tab list's
+                -- top offset now that Visible has changed above.
+                if UpdatePagesLayout then
+                    UpdatePagesLayout()
+                end
             end
-            ApplyTitlePosition(Window.TitlePosition)
             Window.ApplyTitlePosition = ApplyTitlePosition
 
             Items["Pages"] = Instances:Create("Frame", {
@@ -6288,6 +6301,37 @@ end)
                 BorderSizePixel = 0,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })
+
+            do
+                -- Base layout matches the original fixed values (top=100,
+                -- bottom reserve=74 for the profile box + margins below).
+                -- LogoTitleGap is how much extra room the Logo-position title
+                -- needs underneath the logo before the tab list can start.
+                local BaseTop           = 100
+                local LogoTitleGap      = 20
+                local ProfileReserve    = 74
+                local HiddenProfileGap  = 20 -- reserve when the profile box is hidden (Unknown Mode)
+                local ProfileIsHidden   = false
+
+                UpdatePagesLayout = function()
+                    local Top = BaseTop + (Items["LogoTitle"].Instance.Visible and LogoTitleGap or 0)
+                    local BottomReserve = ProfileIsHidden and HiddenProfileGap or ProfileReserve
+                    Items["Pages"].Instance.Position = UDim2New(0, 0, 0, Top)
+                    Items["Pages"].Instance.Size = UDim2New(1, 0, 1, -(Top + BottomReserve))
+                end
+
+                -- Exposed so ApplyUnknownMode (defined later, once the profile
+                -- box exists) can toggle the bottom reserve when it hides it.
+                Window.SetProfileHidden = function(Bool)
+                    ProfileIsHidden = Bool
+                    UpdatePagesLayout()
+                end
+            end
+
+            -- Now that Items["Pages"] and UpdatePagesLayout exist, apply the
+            -- window's actual initial title position (this was previously
+            -- called before Pages existed, using a fixed offset instead).
+            ApplyTitlePosition(Window.TitlePosition)
 
             Instances:Create("UIPadding", {
                 Parent = Items["Pages"].Instance,
@@ -6385,7 +6429,6 @@ end)
             local RealAvatar   = Content
             local RealUsername = LocalPlayer.Name
             local RealUserId   = tostring(LocalPlayer.UserId)
-            local ProfileVisibleSize = Items["Pages"].Instance.Size
 
             local function ApplyUnknownMode(Bool)
                 if not Library.AllowUnknownMode then
@@ -6395,13 +6438,16 @@ end)
                 if Library.UnknownModeStyle == "Hidden" then
                     Items["Profile"].Instance.Visible = not Bool
                     -- Reclaim the space the profile box occupied when it's
-                    -- hidden, so the tab list isn't left with a dead gap.
-                    Items["Pages"].Instance.Size = Bool
-                        and UDim2New(1, 0, 1, -114)
-                        or ProfileVisibleSize
+                    -- hidden (via the same layout helper the title-position
+                    -- fix uses), so the tab list isn't left with a dead gap.
+                    if Window.SetProfileHidden then
+                        Window.SetProfileHidden(Bool)
+                    end
                 else -- "Placeholder"
                     Items["Profile"].Instance.Visible = true
-                    Items["Pages"].Instance.Size = ProfileVisibleSize
+                    if Window.SetProfileHidden then
+                        Window.SetProfileHidden(false)
+                    end
                     Items["ProfileAvatar"].Instance.Image = Bool and "rbxasset://textures/ui/GuiImagePlaceholder.png" or RealAvatar
                     Items["ProfileUsername"].Instance.Text = Bool and "Unknown" or RealUsername
                     Items["ProfileUserId"].Instance.Text = Bool and "XX00XX00" or RealUserId
