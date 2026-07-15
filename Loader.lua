@@ -7757,7 +7757,23 @@ end)
 			    local SettingsSaveFile = Library.Folders.Directory .. "/LibrarySettings.json"
 			    local PersistedFlags = { }
 
+			    -- [Fix: Settings Never Persisting] SaveLibrarySettings used to run
+			    -- unconditionally from every control's Callback. But each control
+			    -- also fires its own Callback once at creation time (Toggle:Set/
+			    -- Slider:Set/Dropdown:Set(Data.Default)) to apply its initial
+			    -- value. That meant building this page always saved the hardcoded
+			    -- DEFAULTS to disk first, clobbering whatever the user had saved
+			    -- in a previous session -- and only after that did we try to load
+			    -- the (now-overwritten) file. This flag keeps saves disabled until
+			    -- every control has been created AND the saved file (if any) has
+			    -- been re-applied, so only real user-driven changes get persisted.
+			    local SettingsReady = false
+
 			    local function SaveLibrarySettings()
+			        if not SettingsReady then
+			            return
+			        end
+
 			        Library:SafeCall(function()
 			            local Data = { }
 
@@ -7992,6 +8008,13 @@ end)
 			            Library:LoadConfig(readfile(SettingsSaveFile))
 			        end)
 			    end
+
+			    -- [Fix: Settings Never Persisting] Only now is it safe to let
+			    -- SaveLibrarySettings actually write -- every default-value
+			    -- callback and the restore-from-disk load above have both
+			    -- already fired, so nothing left will call it with stale/
+			    -- default data.
+			    SettingsReady = true
 			end
 
             -- [Feature: Credits] Always-last sub-page showing dev credits
