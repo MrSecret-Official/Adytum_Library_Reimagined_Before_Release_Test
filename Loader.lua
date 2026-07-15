@@ -6458,15 +6458,34 @@ end)
             Items["Title"].Instance.LayoutOrder = 1
             Items["Description"].Instance.LayoutOrder = 2
 
-            Items["Liner"] = Instances:Create("Frame", {
+            local LinerContainer = Instances:Create("Frame", {
                 Parent = Items["Notification"].Instance,
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Size = UDim2New(0, 0, 0, 1),
+                BorderSizePixel = 0,
+                LayoutOrder = 3
+            })
+
+            Items["Liner"] = Instances:Create("Frame", {
+                Parent = LinerContainer.Instance,
                 Name = "\0",
                 BorderColor3 = FromRGB(0, 0, 0),
                 Size = UDim2New(1, 0, 0, 1),
                 BorderSizePixel = 0,
-                BackgroundColor3 = FromRGB(202, 243, 255),
-                LayoutOrder = 3
+                BackgroundColor3 = FromRGB(202, 243, 255)
             })  Items["Liner"]:AddToTheme({BackgroundColor3 = "Accent"})
+
+            -- Sync LinerContainer width to the text size dynamically to avoid 
+            -- Scale=1 infinite expansion bugs with nested AutomaticSize
+            local function UpdateLinerWidth()
+                local titleWidth = Items["Title"].Instance.AbsoluteSize.X
+                local descWidth = Items["Description"].Instance.AbsoluteSize.X
+                LinerContainer.Instance.Size = UDim2New(0, math.max(titleWidth, descWidth), 0, 1)
+            end
+            UpdateLinerWidth()
+            Items["Title"].Instance:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateLinerWidth)
+            Items["Description"].Instance:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateLinerWidth)
         end
 
         for Index, Value in Items do 
