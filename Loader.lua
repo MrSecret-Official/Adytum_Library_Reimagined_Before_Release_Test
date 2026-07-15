@@ -139,15 +139,16 @@ local Library do
         -- and this whole feature from users entirely.
         AllowAdvancedTheming = true,   -- dev sets false to disable
 
-        -- [Feature: Unknown Mode] Lets the user hide their real Roblox
-        -- identity from the player profile box. AllowUnknownMode is the dev
-        -- switch for the WHOLE feature (default true = users get the toggle
-        -- in Settings). UnknownModeStyle picks WHAT happens when a user turns
-        -- it on: "Placeholder" swaps the avatar/username/id for generic
-        -- placeholders while keeping the box visible, "Hidden" removes the
-        -- profile box entirely. Not overridable by the loading script.
+        -- [Feature: Unknown Mode] Lets the user hide the player profile box
+        -- (avatar/username/id) entirely. AllowUnknownMode is the dev switch
+        -- for the whole feature (default true = users get the toggle in
+        -- Settings). Not overridable by the loading script.
         AllowUnknownMode = true,        -- dev sets false to disable the whole feature
-        UnknownModeStyle = "Placeholder", -- "Placeholder" | "Hidden" -- dev picks the behavior
+
+        -- [Feature: Notification Size] Multiplier applied to notification
+        -- text size/padding/spacing. Changed via the "Notification Size"
+        -- dropdown in Settings (Small = 1, Medium = 1.2, Large = 1.3).
+        NotificationScale = 1,
 
         -- [Feature: Corner Radius] Per-type corner radius values and registry
         CornerRadius = {
@@ -5656,6 +5657,11 @@ end)
     end
 
     Library.Notification = function(self, Title, Description, Duration)
+        -- [Feature: Notification Size] Small = 1x (original size), scaling
+        -- text size/padding/spacing up for Medium/Large so the whole box
+        -- grows proportionally (it's AutomaticSize-driven).
+        local Scale = Library.NotificationScale or 1
+
         local Items = { } do 
             Items["Notification"] = Instances:Create("Frame", {
                 Parent = Library.NotifHolder.Instance,
@@ -5678,10 +5684,10 @@ end)
             Instances:Create("UIPadding", {
                 Parent = Items["Notification"].Instance,
                 Name = "\0",
-                PaddingTop = UDimNew(0, 5),
-                PaddingBottom = UDimNew(0, 12),
-                PaddingRight = UDimNew(0, 5),
-                PaddingLeft = UDimNew(0, 5)
+                PaddingTop = UDimNew(0, Library:Round(5 * Scale)),
+                PaddingBottom = UDimNew(0, Library:Round(12 * Scale)),
+                PaddingRight = UDimNew(0, Library:Round(5 * Scale)),
+                PaddingLeft = UDimNew(0, Library:Round(5 * Scale))
             })
 
             Items["Title"] = Instances:Create("TextLabel", {
@@ -5695,7 +5701,7 @@ end)
                 TextXAlignment = Enum.TextXAlignment.Left,
                 BorderSizePixel = 0,
                 AutomaticSize = Enum.AutomaticSize.XY,
-                TextSize = 9,
+                TextSize = Library:Round(9 * Scale),
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["Title"]:AddToTheme({TextColor3 = "Text"})
 
@@ -5708,13 +5714,13 @@ end)
                 TextColor3 = FromRGB(235, 235, 235),
                 TextTransparency = 0.4000000059604645,
                 Text = Description,
-                Position = UDim2New(0, 0, 0, 15),
+                Position = UDim2New(0, 0, 0, Library:Round(15 * Scale)),
                 BorderSizePixel = 0,
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 BorderColor3 = FromRGB(0, 0, 0),
                 AutomaticSize = Enum.AutomaticSize.XY,
-                TextSize = 9,
+                TextSize = Library:Round(9 * Scale),
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["Description"]:AddToTheme({TextColor3 = "Text"})
 
@@ -5723,7 +5729,7 @@ end)
             Items["Liner"] = Instances:Create("Frame", {
                 Parent = Items["Notification"].Instance,
                 Name = "\0",
-                Position = UDim2New(0, 0, 1, 8),
+                Position = UDim2New(0, 0, 1, Library:Round(8 * Scale)),
                 BorderColor3 = FromRGB(0, 0, 0),
                 Size = UDim2New(1, 0, 0, 1),
                 BorderSizePixel = 0,
@@ -6422,35 +6428,21 @@ end)
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["ProfileUserId"]:AddToTheme({TextColor3 = "Placeholder Text"})
 
-            -- [Feature: Unknown Mode] Real values kept so we can restore them
-            -- if the user turns the toggle back off. What actually happens
-            -- when it's turned on ("Placeholder" vs "Hidden") is decided by
-            -- the dev via Library.UnknownModeStyle, not by the loading script.
-            local RealAvatar   = Content
-            local RealUsername = LocalPlayer.Name
-            local RealUserId   = tostring(LocalPlayer.UserId)
-
+            -- [Feature: Unknown Mode] Simply hides the whole profile box
+            -- (avatar/username/id) when the user turns it on. Whether this
+            -- feature exists at all is a dev-level switch
+            -- (Library.AllowUnknownMode), not overridable by the loading script.
             local function ApplyUnknownMode(Bool)
                 if not Library.AllowUnknownMode then
                     return
                 end
 
-                if Library.UnknownModeStyle == "Hidden" then
-                    Items["Profile"].Instance.Visible = not Bool
-                    -- Reclaim the space the profile box occupied when it's
-                    -- hidden (via the same layout helper the title-position
-                    -- fix uses), so the tab list isn't left with a dead gap.
-                    if Window.SetProfileHidden then
-                        Window.SetProfileHidden(Bool)
-                    end
-                else -- "Placeholder"
-                    Items["Profile"].Instance.Visible = true
-                    if Window.SetProfileHidden then
-                        Window.SetProfileHidden(false)
-                    end
-                    Items["ProfileAvatar"].Instance.Image = Bool and "rbxasset://textures/ui/GuiImagePlaceholder.png" or RealAvatar
-                    Items["ProfileUsername"].Instance.Text = Bool and "Unknown" or RealUsername
-                    Items["ProfileUserId"].Instance.Text = Bool and "XX00XX00" or RealUserId
+                Items["Profile"].Instance.Visible = not Bool
+                -- Reclaim the space the profile box occupied when it's
+                -- hidden (via the same layout helper the title-position fix
+                -- uses), so the tab list isn't left with a dead gap.
+                if Window.SetProfileHidden then
+                    Window.SetProfileHidden(Bool)
                 end
             end
 
@@ -7779,12 +7771,10 @@ end)
 			            })
 			        end
 
-			        -- [Feature: Unknown Mode] Lets the user anonymize the
-			        -- player profile box. Whether this shows up at all is a
-			        -- dev-level switch (Library.AllowUnknownMode); what it
-			        -- actually does (hide the box vs. show placeholders) is
-			        -- also chosen by the dev (Library.UnknownModeStyle), not
-			        -- configurable from here.
+			        -- [Feature: Unknown Mode] Hides the player profile box
+			        -- entirely. Whether this shows up at all is a dev-level
+			        -- switch (Library.AllowUnknownMode), not configurable
+			        -- from the loading script.
 			        if Library.AllowUnknownMode then
 			            SettingsSection:Toggle({
 			                Name = "Unknown Mode",
@@ -7794,6 +7784,22 @@ end)
 			                    if Window and Window.ApplyUnknownMode then
 			                        Window.ApplyUnknownMode(Value)
 			                    end
+			                end
+			            })
+			        end
+
+			        -- [Feature: Notification Size] Small keeps the original
+			        -- size, Medium/Large scale text+padding+spacing up.
+			        do
+			            local SizeMap = {Small = 1, Medium = 1.2, Large = 1.3}
+			            local ScaleToName = {[1] = "Small", [1.2] = "Medium", [1.3] = "Large"}
+			            SettingsSection:Dropdown({
+			                Name = "Notification Size",
+			                Flag = "NotificationSize",
+			                Items = {"Small", "Medium", "Large"},
+			                Default = ScaleToName[Library.NotificationScale] or "Small",
+			                Callback = function(Value)
+			                    Library.NotificationScale = SizeMap[Value] or 1
 			                end
 			            })
 			        end
