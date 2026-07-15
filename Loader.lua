@@ -6514,18 +6514,17 @@ end)
                 end
             end
 
-            -- Freeze the frame at its current (possibly live-rescaled)
-            -- size only now, right as the closing animation takes over --
-            -- AutomaticSize and a manual Size tween can't drive the same
-            -- axis at once, so this is the latest point we can capture it.
-            local ClosingSize = Items["Notification"].Instance.AbsoluteSize
-            Items["Notification"].Instance.Size = UDim2New(0, ClosingSize.X, 0, ClosingSize.Y)
-            Items["Notification"].Instance.AutomaticSize = Enum.AutomaticSize.None
-
-            Items["Notification"]:Tween(nil, {Size = UDim2New(0, ClosingSize.X, 0, 0)})
             Items["Liner"]:Tween(TweenInfo.new(Duration, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New(0, 0, 0, 1)})
             
             task.delay(Duration + 0.1, function()
+                -- Freeze the frame at its current (possibly live-rescaled)
+                -- size only now, right as the closing animation takes over --
+                -- AutomaticSize and a manual Size tween can't drive the same
+                -- axis at once, so this is the latest point we can capture it.
+                local ClosingSize = Items["Notification"].Instance.AbsoluteSize
+                Items["Notification"].Instance.Size = UDim2New(0, ClosingSize.X, 0, ClosingSize.Y)
+                Items["Notification"].Instance.AutomaticSize = Enum.AutomaticSize.None
+
                 for Index, Value in Items do 
                     if Value.Instance:IsA("Frame") then
                         Value:Tween(nil, {BackgroundTransparency = 1})
