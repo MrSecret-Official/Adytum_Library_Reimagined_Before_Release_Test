@@ -1570,9 +1570,14 @@ local Library do
         Scale = MathClamp(Scale, 0.85, 1.2)
         self.UIScale = Scale
         if self.WindowUIScale then
+            -- Rescaling the whole window is a much bigger visual jump than a
+            -- hover/toggle tween, so it gets its own slower, softer curve
+            -- instead of reusing the snappy Library.Tween.Time. Still
+            -- collapses to near-instant when Reduce Motion is on.
+            local Time = self.ReduceMotion and 0.01 or 0.55
             TweenService:Create(
                 self.WindowUIScale,
-                TweenInfo.new(self.Tween.Time, self.Tween.Style, self.Tween.Direction),
+                TweenInfo.new(Time, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
                 {Scale = Scale}
             ):Play()
         end
