@@ -6332,6 +6332,7 @@ end)
                 BorderColor3 = FromRGB(12, 12, 12),
                 BorderSizePixel = 2,
                 AutomaticSize = Enum.AutomaticSize.XY,
+                ClipsDescendants = true,
                 BackgroundColor3 = FromRGB(14, 17, 15)
             })  Items["Notification"]:AddToTheme({BackgroundColor3 = "Background", BorderColor3 = "Border"})
 
