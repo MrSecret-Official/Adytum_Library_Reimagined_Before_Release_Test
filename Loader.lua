@@ -329,6 +329,54 @@ local Library do
 			["Placeholder Text"]= FromRGB(200, 160, 140),
 			["Accent"]          = FromRGB(255, 100, 50)
 		},
+		-- [Feature: Theme Presets] Built-in: Ruby (deep crimson, dark and
+		-- rich like the gemstone rather than a harsh warning-red)
+		["Ruby"] = {
+			["Background"]      = FromRGB(16, 6, 8),
+			["Border"]          = FromRGB(40, 14, 18),
+			["Inline"]          = FromRGB(26, 10, 13),
+			["Hovered Element"] = FromRGB(110, 25, 40),
+			["Page Background"] = FromRGB(20, 8, 10),
+			["Outline"]         = FromRGB(160, 35, 55),
+			["Element"]         = FromRGB(32, 12, 16),
+			["Gradient"]        = FromRGB(200, 20, 50),
+			["Text"]            = FromRGB(250, 225, 230),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(200, 150, 160),
+			["Accent"]          = FromRGB(225, 30, 65)
+		},
+		-- [Feature: Theme Presets] Built-in: Emerald (soft, dark green;
+		-- muted enough to stay easy on the eyes rather than neon)
+		["Emerald"] = {
+			["Background"]      = FromRGB(6, 16, 12),
+			["Border"]          = FromRGB(16, 40, 30),
+			["Inline"]          = FromRGB(11, 26, 20),
+			["Hovered Element"] = FromRGB(30, 95, 70),
+			["Page Background"] = FromRGB(9, 20, 15),
+			["Outline"]         = FromRGB(45, 140, 100),
+			["Element"]         = FromRGB(14, 35, 26),
+			["Gradient"]        = FromRGB(20, 160, 110),
+			["Text"]            = FromRGB(225, 250, 238),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(150, 200, 175),
+			["Accent"]          = FromRGB(35, 190, 130)
+		},
+		-- [Feature: Theme Presets] Built-in: Sunset (warm golden yellow on a
+		-- dark base, so it stays readable instead of glaring)
+		["Sunset"] = {
+			["Background"]      = FromRGB(16, 13, 4),
+			["Border"]          = FromRGB(42, 34, 10),
+			["Inline"]          = FromRGB(28, 22, 8),
+			["Hovered Element"] = FromRGB(120, 95, 20),
+			["Page Background"] = FromRGB(20, 16, 6),
+			["Outline"]         = FromRGB(180, 145, 30),
+			["Element"]         = FromRGB(34, 27, 10),
+			["Gradient"]        = FromRGB(230, 180, 20),
+			["Text"]            = FromRGB(255, 248, 225),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(205, 185, 130),
+			["Accent"]          = FromRGB(240, 190, 30)
+		},
 		-- [Feature: Colorblind Presets] Blue/orange pairing avoids the
 		-- red-green confusion that affects deuteranopia and protanopia,
 		-- the two most common forms of colorblindness.
@@ -370,6 +418,9 @@ local Library do
     Library.ThemePresets["Default"]  = TableClone(Themes["Preset"])
     Library.ThemePresets["Midnight"] = TableClone(Themes["Midnight"])
     Library.ThemePresets["Ember"]    = TableClone(Themes["Ember"])
+    Library.ThemePresets["Ruby"]     = TableClone(Themes["Ruby"])
+    Library.ThemePresets["Emerald"]  = TableClone(Themes["Emerald"])
+    Library.ThemePresets["Sunset"]   = TableClone(Themes["Sunset"])
     -- [Feature: Colorblind Presets] Indicative display names so users can
     -- tell at a glance which kind of colorblindness each one is safe for
     Library.ThemePresets["Colorblind (Red-Green Safe)"]  = TableClone(Themes["ColorblindRG"])
