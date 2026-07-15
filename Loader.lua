@@ -139,6 +139,16 @@ local Library do
         -- and this whole feature from users entirely.
         AllowAdvancedTheming = true,   -- dev sets false to disable
 
+        -- [Feature: Unknown Mode] Lets the user hide their real Roblox
+        -- identity from the player profile box. AllowUnknownMode is the dev
+        -- switch for the WHOLE feature (default true = users get the toggle
+        -- in Settings). UnknownModeStyle picks WHAT happens when a user turns
+        -- it on: "Placeholder" swaps the avatar/username/id for generic
+        -- placeholders while keeping the box visible, "Hidden" removes the
+        -- profile box entirely. Not overridable by the loading script.
+        AllowUnknownMode = true,        -- dev sets false to disable the whole feature
+        UnknownModeStyle = "Placeholder", -- "Placeholder" | "Hidden" -- dev picks the behavior
+
         -- [Feature: Corner Radius] Per-type corner radius values and registry
         CornerRadius = {
             Window  = 6,
@@ -749,7 +759,10 @@ local Library do
                 Parent = self.Instance,
                 Color = Library.Theme["Text Stroke"],
                 Thickness = 1,
-                Transparency = 0.6,
+                -- [Fix: Title Legibility] Was 0.6 (very faint), which let titles
+                -- wash out against bright accent glows/light themes. A more
+                -- opaque stroke keeps text readable regardless of what's behind it.
+                Transparency = 0.25,
                 LineJoinMode = Enum.LineJoinMode.Miter
             })  UIStroke:AddToTheme({Color = "Text Stroke"})
 
@@ -1526,17 +1539,22 @@ local Library do
             Hub       = HubPath,
             Game      = GamePath,
             Configs   = GamePath .. "/Configs",
-            Themes    = GamePath .. "/Themes",
+            -- [Feature: Global Themes] Kept at the shared Root instead of the
+            -- per-hub path so a theme saved (or set active) from one dev's
+            -- script is immediately visible and usable from any other dev's
+            -- script that loads this same Loader.lua, rather than being
+            -- siloed per hub/game like Configs are.
+            Themes    = Root .. "/Themes",
             Assets    = HubPath .. "/Assets",
         }
 
         local Paths = {
             Root,
+            Root .. "/Themes",
             HubPath,
             HubPath .. "/Assets",
             GamePath,
             GamePath .. "/Configs",
-            GamePath .. "/Themes",
         }
         for _, Path in Paths do
             if not isfolder(Path) then
@@ -1701,6 +1719,11 @@ local Library do
                     BorderSizePixel = 0,
                     AutomaticSize = Enum.AutomaticSize.X,
                     TextSize = 9,
+                    -- [Fix: Title Legibility] The Glow frame below is created
+                    -- AFTER this label, so without an explicit ZIndex it was
+                    -- rendering ON TOP of the tab title, washing it out/hiding
+                    -- it. ZIndex forces the text back above the glow.
+                    ZIndex = 2,
                     BackgroundColor3 = FromRGB(255, 255, 255)
                 })  Items["Text"]:AddToTheme({TextColor3 = "Text"})
 
@@ -1713,13 +1736,15 @@ local Library do
                     BorderColor3 = FromRGB(0, 0, 0),
                     Size = UDim2New(0, 20, 1, 0),
                     BorderSizePixel = 0,
+                    ZIndex = 1,
                     BackgroundColor3 = FromRGB(25, 30, 26)
                 })  Items["Glow"]:AddToTheme({BackgroundColor3 = "Accent"})
 
                 Items["GlowGradient"] = Instances:Create("UIGradient", {
                     Parent = Items["Glow"].Instance,
                     Name = "\0",
-                    Transparency = NumSequence{NumSequenceKeypoint(0, 0), NumSequenceKeypoint(0.193, 0.8687499761581421), NumSequenceKeypoint(0.504, 0.96875), NumSequenceKeypoint(1, 1)}
+                    -- [Fix: Title Legibility] Floor raised from 0 to 0.35 so the glow never goes fully opaque under a title/label
+                    Transparency = NumSequence{NumSequenceKeypoint(0, 0.35), NumSequenceKeypoint(0.193, 0.8687499761581421), NumSequenceKeypoint(0.504, 0.96875), NumSequenceKeypoint(1, 1)}
                 })
 
                 Items["Page"] = Instances:Create("Frame", {
@@ -2006,6 +2031,9 @@ local Library do
                     BorderSizePixel = 0,
                     AutomaticSize = Enum.AutomaticSize.X,
                     TextSize = 9,
+                    -- [Fix: Title Legibility] See main tab fix above; same
+                    -- Glow-created-after-Text ordering issue applies here.
+                    ZIndex = 2,
                     BackgroundColor3 = FromRGB(255, 255, 255)
                 })  Items["Text"]:AddToTheme({TextColor3 = "Text"})
 
@@ -2034,13 +2062,15 @@ local Library do
                     BorderColor3 = FromRGB(0, 0, 0),
                     Size = UDim2New(0, 20, 1, 2),
                     BorderSizePixel = 0,
+                    ZIndex = 1,
                     BackgroundColor3 = FromRGB(202, 243, 255)
                 })  Items["Glow"]:AddToTheme({BackgroundColor3 = "Accent"})
 
                 Instances:Create("UIGradient", {
                     Parent = Items["Glow"].Instance,
                     Name = "\0",
-                    Transparency = NumSequence{NumSequenceKeypoint(0, 0), NumSequenceKeypoint(0.193, 0.8687499761581421), NumSequenceKeypoint(0.504, 0.96875), NumSequenceKeypoint(1, 1)}
+                    -- [Fix: Title Legibility] Floor raised from 0 to 0.35 so the glow never goes fully opaque under a title/label
+                    Transparency = NumSequence{NumSequenceKeypoint(0, 0.35), NumSequenceKeypoint(0.193, 0.8687499761581421), NumSequenceKeypoint(0.504, 0.96875), NumSequenceKeypoint(1, 1)}
                 })
 
                 Items["Liner"] = Instances:Create("Frame", {
@@ -6348,6 +6378,38 @@ end)
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["ProfileUserId"]:AddToTheme({TextColor3 = "Placeholder Text"})
 
+            -- [Feature: Unknown Mode] Real values kept so we can restore them
+            -- if the user turns the toggle back off. What actually happens
+            -- when it's turned on ("Placeholder" vs "Hidden") is decided by
+            -- the dev via Library.UnknownModeStyle, not by the loading script.
+            local RealAvatar   = Content
+            local RealUsername = LocalPlayer.Name
+            local RealUserId   = tostring(LocalPlayer.UserId)
+            local ProfileVisibleSize = Items["Pages"].Instance.Size
+
+            local function ApplyUnknownMode(Bool)
+                if not Library.AllowUnknownMode then
+                    return
+                end
+
+                if Library.UnknownModeStyle == "Hidden" then
+                    Items["Profile"].Instance.Visible = not Bool
+                    -- Reclaim the space the profile box occupied when it's
+                    -- hidden, so the tab list isn't left with a dead gap.
+                    Items["Pages"].Instance.Size = Bool
+                        and UDim2New(1, 0, 1, -114)
+                        or ProfileVisibleSize
+                else -- "Placeholder"
+                    Items["Profile"].Instance.Visible = true
+                    Items["Pages"].Instance.Size = ProfileVisibleSize
+                    Items["ProfileAvatar"].Instance.Image = Bool and "rbxasset://textures/ui/GuiImagePlaceholder.png" or RealAvatar
+                    Items["ProfileUsername"].Instance.Text = Bool and "Unknown" or RealUsername
+                    Items["ProfileUserId"].Instance.Text = Bool and "XX00XX00" or RealUserId
+                end
+            end
+
+            Window.ApplyUnknownMode = ApplyUnknownMode
+
             Items["Content"] = Instances:Create("Frame", {
                 Parent = Items["Window"].Instance,
                 Name = "\0",
@@ -6632,6 +6694,9 @@ end)
                 BorderColor3 = FromRGB(0, 0, 0),
                 Size = UDim2New(1, 0, 0, 15),
                 BorderSizePixel = 0,
+                -- [Fix: Title Legibility] Explicit low ZIndex guarantees the
+                -- title text below always renders above this glow overlay.
+                ZIndex = 1,
                 BackgroundColor3 = FromRGB(202, 243, 255)
             })  Items["Glow"]:AddToTheme({BackgroundColor3  = "Accent"})
 
@@ -6639,7 +6704,8 @@ end)
                 Parent = Items["Glow"].Instance,
                 Name = "\0",
                 Rotation = 90,
-                Transparency = NumSequence{NumSequenceKeypoint(0, 0), NumSequenceKeypoint(0.193, 0.8687499761581421), NumSequenceKeypoint(0.504, 0.96875), NumSequenceKeypoint(1, 1)}
+                -- [Fix: Title Legibility] Floor raised from 0 to 0.35 so the glow never goes fully opaque under a title/label
+                    Transparency = NumSequence{NumSequenceKeypoint(0, 0.35), NumSequenceKeypoint(0.193, 0.8687499761581421), NumSequenceKeypoint(0.504, 0.96875), NumSequenceKeypoint(1, 1)}
             })
 
             Items["Text"] = Instances:Create("TextLabel", {
@@ -6655,6 +6721,7 @@ end)
                 BorderSizePixel = 0,
                 AutomaticSize = Enum.AutomaticSize.X,
                 TextSize = 9,
+                ZIndex = 2,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })  Items["Text"]:AddToTheme({TextColor3 = "Text"})
 
@@ -7653,8 +7720,33 @@ end)
 			                Default = PosMap[CurrentPos] or "Topbar",
 			                Callback = function(Value)
 			                    local Pos = Value == "Logo box" and "Logo" or Value
+			                    -- [Fix: Title Disappearing] Was called with a colon
+			                    -- (Window:ApplyTitlePosition(Pos)), which silently
+			                    -- passed Window itself as the Position argument
+			                    -- instead of Pos. Position then never matched
+			                    -- "Topbar"/"Logo" and fell through to the "None"
+			                    -- branch, hiding the title every time this ran.
 			                    if Window and Window.ApplyTitlePosition then
-			                        Window:ApplyTitlePosition(Pos)
+			                        Window.ApplyTitlePosition(Pos)
+			                    end
+			                end
+			            })
+			        end
+
+			        -- [Feature: Unknown Mode] Lets the user anonymize the
+			        -- player profile box. Whether this shows up at all is a
+			        -- dev-level switch (Library.AllowUnknownMode); what it
+			        -- actually does (hide the box vs. show placeholders) is
+			        -- also chosen by the dev (Library.UnknownModeStyle), not
+			        -- configurable from here.
+			        if Library.AllowUnknownMode then
+			            SettingsSection:Toggle({
+			                Name = "Unknown Mode",
+			                Flag = "UnknownMode",
+			                Default = false,
+			                Callback = function(Value)
+			                    if Window and Window.ApplyUnknownMode then
+			                        Window.ApplyUnknownMode(Value)
 			                    end
 			                end
 			            })
