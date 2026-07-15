@@ -1541,6 +1541,60 @@ local Library do
         end
     end
 
+    -- [Feature: Font Size / UI Scale] Shared stepped animator. Instead of
+    -- tweening straight from the current value to whatever the slider is at
+    -- now, this walks toward Target in fixed-size steps (StepSize),
+    -- finishing each step's tween completely before looking at the target
+    -- again. That means:
+    --   - dragging the slider quickly just updates State.Target; it can't
+    --     cancel or skip the step currently animating, it only queues where
+    --     to go next once that step finishes.
+    --   - the jump is never bigger than one step, so there's no large
+    --     instant "flash" resize even for a big slider move.
+    -- Reduce Motion shortens the per-step duration and switches to a linear
+    -- ease instead of collapsing to ~0s: a big scale change happening in a
+    -- single frame is the kind of hard flash/strobe that Reduce Motion is
+    -- supposed to prevent, not cause.
+    Library._RunSteppedScale = function(self, State, Target, StepSize, Apply)
+        State.Target = Target
+        if State.Animating then
+            return
+        end
+        State.Animating = true
+
+        task.spawn(function()
+            while MathAbs(State.Target - State.Value) > 1e-4 do
+                local Current = State.Value
+                local Goal = State.Target
+                local Diff = Goal - Current
+                local StepTarget = (MathAbs(Diff) <= StepSize) and Goal or (Current + StepSize * (Diff > 0 and 1 or -1))
+
+                local Duration = self.ReduceMotion and 0.12 or 0.22
+                local Style = self.ReduceMotion and Enum.EasingStyle.Linear or Enum.EasingStyle.Quint
+
+                local Holder = InstanceNew("NumberValue")
+                Holder.Value = Current
+
+                local Conn = Holder:GetPropertyChangedSignal("Value"):Connect(function()
+                    State.Value = Holder.Value
+                    Apply(Holder.Value)
+                end)
+
+                local StepTween = TweenService:Create(Holder, TweenInfo.new(Duration, Style, Enum.EasingDirection.Out), {Value = StepTarget})
+                StepTween:Play()
+                StepTween.Completed:Wait()
+
+                Conn:Disconnect()
+                Holder:Destroy()
+
+                State.Value = StepTarget
+                Apply(StepTarget)
+            end
+
+            State.Animating = false
+        end)
+    end
+
     -- [Feature: Font Size] Register a text Instance's base TextSize so
     -- SetFontScale can rescale it later. Called automatically by
     -- Instances:Create for every TextLabel/TextButton/TextBox, so this
@@ -1550,37 +1604,40 @@ local Library do
         TextInstance.TextSize = MathFloor((BaseSize * self.FontScale) + 0.5)
     end
 
-    -- [Feature: Font Size] Rescale every registered text Instance. Skips
-    -- entries whose Instance has been destroyed/unparented (e.g. a closed
-    -- notification) instead of erroring on them.
+    -- [Feature: Font Size] Rescale every registered text Instance, walking
+    -- there in slow 5%-at-a-time steps via _RunSteppedScale rather than
+    -- jumping straight to the new value. Skips entries whose Instance has
+    -- been destroyed/unparented (e.g. a closed notification) instead of
+    -- erroring on them.
+    Library.FontScaleState = { Value = Library.FontScale or 1, Target = Library.FontScale or 1, Animating = false }
     Library.SetFontScale = function(self, Scale)
         Scale = MathClamp(Scale, 0.85, 1.25)
         self.FontScale = Scale
-        for _, Item in self.FontItems do
-            if Item.Instance and Item.Instance.Parent then
-                Item.Instance.TextSize = MathFloor((Item.Base * Scale) + 0.5)
+        self:_RunSteppedScale(self.FontScaleState, Scale, 0.05, function(Value)
+            for _, Item in self.FontItems do
+                if Item.Instance and Item.Instance.Parent then
+                    Item.Instance.TextSize = MathFloor((Item.Base * Value) + 0.5)
+                end
             end
-        end
+        end)
     end
 
     -- [Feature: UI Scale] Scales the whole window (size, position and, as a
     -- side effect of how UIScale works, text too) via the UIScale instance
-    -- parented under the main window frame.
+    -- parented under the main window frame. Same slow 5%-at-a-time stepping
+    -- as SetFontScale, via _RunSteppedScale.
+    Library.UIScaleState = { Value = Library.UIScale or 1, Target = Library.UIScale or 1, Animating = false }
     Library.SetUIScale = function(self, Scale)
         Scale = MathClamp(Scale, 0.85, 1.2)
         self.UIScale = Scale
         if self.WindowUIScale then
-            -- Rescaling the whole window is a much bigger visual jump than a
-            -- hover/toggle tween, so it gets its own slower, softer curve
-            -- instead of reusing the snappy Library.Tween.Time. Still
-            -- collapses to near-instant when Reduce Motion is on.
-            local Time = self.ReduceMotion and 0.01 or 0.55
-            TweenService:Create(
-                self.WindowUIScale,
-                TweenInfo.new(Time, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-                {Scale = Scale}
-            ):Play()
+            self:_RunSteppedScale(self.UIScaleState, Scale, 0.05, function(Value)
+                if self.WindowUIScale then
+                    self.WindowUIScale.Scale = Value
+                end
+            end)
         end
+
     end
 
     -- [Feature: Reduce Motion] Forces tweens to be effectively instant
