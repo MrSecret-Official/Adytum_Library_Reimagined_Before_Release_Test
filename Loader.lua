@@ -6434,49 +6434,31 @@ end)
 
             Items["UIStroke3"] = Items["Description"]:TextBorder()
 
-            -- [Fix: Notification Text Overlap] Description's Y position used
-            -- to be a fixed offset (15 * Scale) assuming Title's height at
-            -- the base 9px TextSize. Title has AutomaticSize.XY, so once
-            -- FontScale grows the title text, its real height outgrows that
-            -- fixed offset and Description gets drawn overlapping it (with
-            -- ClipsDescendants cropping most of it away). Instead, position
-            -- Description relative to Title's actual live AbsoluteSize.Y and
-            -- keep it updated any time Title's size changes (FontScale
-            -- rescale or NotificationScale).
-            local function RepositionDescription()
-                Items["Description"].Instance.Position = UDim2New(
-                    0, 0, 0, Items["Title"].Instance.AbsoluteSize.Y + Library:Round(6 * Scale)
-                )
-            end
+            -- [Fix: Notification UI Squashed Bug] Using manual Y positioning with Scale
+            -- on Liner (Position = {0,0,1,8}) while Notification has AutomaticSize.XY
+            -- creates a circular dependency in Roblox's layout engine, causing the frame
+            -- to collapse/squash to 0 height. Using a UIListLayout ensures all elements 
+            -- stack correctly and the AutomaticSize calculates synchronously.
+            Instances:Create("UIListLayout", {
+                Parent = Items["Notification"].Instance,
+                Name = "\0",
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDimNew(0, Library:Round(6 * Scale))
+            })
 
-            RepositionDescription()
-            Items["Title"].Instance:GetPropertyChangedSignal("AbsoluteSize"):Connect(RepositionDescription)
+            Items["Title"].Instance.LayoutOrder = 1
+            Items["Description"].Instance.LayoutOrder = 2
 
             Items["Liner"] = Instances:Create("Frame", {
                 Parent = Items["Notification"].Instance,
                 Name = "\0",
-                Position = UDim2New(0, 0, 1, Library:Round(8 * Scale)),
                 BorderColor3 = FromRGB(0, 0, 0),
                 Size = UDim2New(1, 0, 0, 1),
                 BorderSizePixel = 0,
-                BackgroundColor3 = FromRGB(202, 243, 255)
+                BackgroundColor3 = FromRGB(202, 243, 255),
+                LayoutOrder = 3
             })  Items["Liner"]:AddToTheme({BackgroundColor3 = "Accent"})
         end
-
-        -- [Fix: Notification Text Overflow] AbsoluteSize doesn't update
-        -- synchronously after creating the instance/setting Text -- Roblox's
-        -- layout engine (driving AutomaticSize) only commits on the render
-        -- step, which runs *after* Heartbeat. A single Heartbeat:Wait() can
-        -- fire before that first layout pass has actually resolved both
-        -- Title and Description's AutomaticSize.XY, so AbsoluteSize gets
-        -- read too early and a too-narrow width gets locked in below
-        -- (AutomaticSize.Y), leaving the real text clipped by
-        -- ClipsDescendants. Wait for the actual render step (twice, since
-        -- Description's size can shift again after RepositionDescription
-        -- reacts to Title's first resolved AbsoluteSize) so Size reflects
-        -- the fully-settled content width before we lock it in.
-        RunService.RenderStepped:Wait()
-        RunService.RenderStepped:Wait()
 
         for Index, Value in Items do 
             if Value.Instance:IsA("Frame") then
