@@ -4714,7 +4714,6 @@ local Library do
                 elseif (not Bool) and Colorpicker.IsOpen then
                     Colorpicker:SetOpen(false)
                 end
-                Items["ColorpickerButton"].Instance.ImageTransparency = nil
                 Items["ColorpickerButton"]:ChangeItemTheme({BorderColor3 = Bool and "Border" or "Placeholder Text"})
                 Items["ColorpickerButton"].Instance.BackgroundTransparency = Bool and 0 or 0.55
                 Items["ColorpickerButtonInline"].Instance.BackgroundTransparency = Bool and 0 or 0.55
