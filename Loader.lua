@@ -1819,13 +1819,26 @@ local Library do
         if self.HighContrast then
             self:SetHighContrast(true)
         end
+        -- [Fix: Preset/Custom mismatch] Loading a theme — manually via the
+        -- Saved Themes list, or via [AT] autoload — always means the
+        -- colours on screen no longer match Library.ActivePreset's old
+        -- value. Leaving ActivePreset pointing at a preset name while the
+        -- actual colours are something else entirely is exactly what
+        -- caused the HC-related clashes above (SetThemePreset/SetHighContrast
+        -- both assume Theme matches ActivePreset). Flip to "Custom" and
+        -- sync the dropdown every time a theme is loaded, independent of
+        -- whether it also gets persisted to disk (AutoSave).
+        self.ActivePreset = "Custom"
+        if self.PresetDropdownRef then
+            self.PresetDropdownRef:Set("Custom")
+        end
+
         -- Refresh colorpicker UIs so they show the newly loaded colours
         self:RefreshThemeColorpickers()
         if AutoSave then
             -- [Feature: Autoload] Autoloaded theme takes priority: persist it
             -- as the active custom theme so on the next launch the library
             -- restores it instead of whichever preset was previously saved.
-            self.ActivePreset = "Custom"
             self:SaveActivePreset("Custom")
             self:SaveActiveTheme()
         end
@@ -7740,6 +7753,12 @@ end)
                                 Library:Notification("Success", "Preset theme saved automatically", 3)
                             end
                         })
+
+                        -- [Fix: Preset/Custom mismatch] Upvalue-only wasn't
+                        -- reachable from LoadThemeConfig (defined much
+                        -- earlier, outside this scope), so also stash it on
+                        -- Library itself.
+                        Library.PresetDropdownRef = PresetDropdown
                     end
 
                     -- [Feature: High Contrast Mode] Mathematically boosts the
