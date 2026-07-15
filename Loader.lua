@@ -756,16 +756,36 @@ local Library do
                 return
             end
 
+            -- [Fix: Font Distortion At Large Sizes] Thickness used to be a
+            -- flat 1px regardless of TextSize. That looks fine on the small
+            -- 9-11px labels most of the UI uses, but on bigger text (e.g.
+            -- Notification Size = "Large", or any larger label) that same
+            -- 1px stroke becomes disproportionate to the glyph's own stroke
+            -- width and eats into the letterforms, making them look blurry
+            -- and deformed. Scaling thickness with TextSize keeps the
+            -- outline visually consistent at every size. Clamped so it
+            -- never disappears on tiny text or turns into a blob on huge text.
+            local TextSize = (self.Instance.TextSize and self.Instance.TextSize > 0) and self.Instance.TextSize or 13
+            local Thickness = MathClamp(TextSize / 13, 0.65, 1.6)
+
             local UIStroke = Instances:Create("UIStroke", {
                 Parent = self.Instance,
                 Color = Library.Theme["Text Stroke"],
-                Thickness = 1,
+                Thickness = Thickness,
                 -- [Fix: Title Legibility] Was 0.6 (very faint), which let titles
                 -- wash out against bright accent glows/light themes. A more
                 -- opaque stroke keeps text readable regardless of what's behind it.
                 Transparency = 0.25,
                 LineJoinMode = Enum.LineJoinMode.Miter
             })  UIStroke:AddToTheme({Color = "Text Stroke"})
+
+            -- Keep the stroke proportional if TextSize changes later
+            -- (e.g. AutomaticSize labels whose Text/TextSize gets updated
+            -- after creation).
+            Library:Connect(self.Instance:GetPropertyChangedSignal("TextSize"), function()
+                local NewSize = (self.Instance.TextSize and self.Instance.TextSize > 0) and self.Instance.TextSize or 13
+                UIStroke.Thickness = MathClamp(NewSize / 13, 0.65, 1.6)
+            end)
 
             return UIStroke
         end 
