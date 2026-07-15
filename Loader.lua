@@ -6405,7 +6405,7 @@ end)
                 BorderSizePixel = 0,
                 AutomaticSize = Enum.AutomaticSize.XY,
                 TextWrapped = true,
-                TextSize = Library:Round(9 * Scale),
+                TextSize = Scale > 1 and 11 or 9,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             }, Library.NotificationsIgnoreFontScale)  Items["Title"]:AddToTheme({TextColor3 = "Text"})
             -- [Fix: Notification Compression] SkipFontRegister above follows
@@ -6428,7 +6428,7 @@ end)
                 BorderColor3 = FromRGB(0, 0, 0),
                 AutomaticSize = Enum.AutomaticSize.XY,
                 TextWrapped = true,
-                TextSize = Library:Round(9 * Scale),
+                TextSize = Scale > 1 and 11 or 9,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             }, Library.NotificationsIgnoreFontScale)  Items["Description"]:AddToTheme({TextColor3 = "Text"})
             -- [Fix: Notification Compression] Same as Title -- follows
