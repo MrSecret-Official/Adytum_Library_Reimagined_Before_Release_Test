@@ -2840,6 +2840,16 @@ local Library do
                     Padding = UDimNew(0, 6),
                     SortOrder = Enum.SortOrder.LayoutOrder
                 })
+
+                -- [Fix: Font Scale Overlap] TextBounds.X was only read once
+                -- at creation (base font size), so SubElements (the colour
+                -- swatch / keybind box) stayed frozen there while FontScale
+                -- kept growing the text, causing an overlap. Re-anchoring on
+                -- every TextBounds change keeps it glued to the end of the
+                -- text regardless of font size or text content.
+                Items["Text"].Instance:GetPropertyChangedSignal("TextBounds"):Connect(function()
+                    Items["SubElements"].Instance.Position = UDim2New(0, Items["Text"].Instance.TextBounds.X + 30, 0, 0)
+                end)
             end
             
             function Toggle:Get()
@@ -3420,6 +3430,14 @@ local Library do
                     Padding = UDimNew(0, 6),
                     SortOrder = Enum.SortOrder.LayoutOrder
                 })
+
+                -- [Fix: Font Scale Overlap] Same fix as Components.Toggle --
+                -- re-anchor SubElements on every TextBounds change instead
+                -- of a one-time snapshot, so it never overlaps the label
+                -- text after a FontScale change or a Label:SetText call.
+                Items["Text"].Instance:GetPropertyChangedSignal("TextBounds"):Connect(function()
+                    Items["SubElements"].Instance.Position = UDim2New(0, Items["Text"].Instance.TextBounds.X + 8, 0, 0)
+                end)
             end
 
             function Label:SetText(Text)
