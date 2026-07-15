@@ -6437,13 +6437,18 @@ end)
 
         -- [Fix: Notification Text Overflow] AbsoluteSize doesn't update
         -- synchronously after creating the instance/setting Text -- Roblox's
-        -- layout engine (driving AutomaticSize) only settles on the next
-        -- render step. Reading it immediately could capture a stale, too-
-        -- narrow width, which then got locked in below (AutomaticSize.Y),
-        -- letting the Title/Description labels (still AutomaticSize.XY)
-        -- overflow past the frame's border. Waiting a heartbeat first
-        -- ensures Size reflects the real, fully-laid-out content width.
-        RunService.Heartbeat:Wait()
+        -- layout engine (driving AutomaticSize) only commits on the render
+        -- step, which runs *after* Heartbeat. A single Heartbeat:Wait() can
+        -- fire before that first layout pass has actually resolved both
+        -- Title and Description's AutomaticSize.XY, so AbsoluteSize gets
+        -- read too early and a too-narrow width gets locked in below
+        -- (AutomaticSize.Y), leaving the real text clipped by
+        -- ClipsDescendants. Wait for the actual render step (twice, since
+        -- Description's size can shift again after RepositionDescription
+        -- reacts to Title's first resolved AbsoluteSize) so Size reflects
+        -- the fully-settled content width before we lock it in.
+        RunService.RenderStepped:Wait()
+        RunService.RenderStepped:Wait()
 
         local Size = Items["Notification"].Instance.AbsoluteSize
 
