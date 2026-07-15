@@ -914,7 +914,7 @@ local Library do
             -- [Fix: Font Distortion At Large Sizes] Thickness used to be a
             -- flat 1px regardless of TextSize. That looks fine on the small
             -- 9-11px labels most of the UI uses, but on bigger text (e.g.
-            -- Notification Size = "Large", or any larger label) that same
+            -- Notification Size = "Plus", or any larger label) that same
             -- 1px stroke becomes disproportionate to the glyph's own stroke
             -- width and eats into the letterforms, making them look blurry
             -- and deformed. Scaling thickness with TextSize keeps the
@@ -8790,16 +8790,16 @@ end)
 			            TableInsert(PersistedFlags, "TitlePosition")
 			        end
 
-			        -- [Feature: Notification Size] Small keeps the original
-			        -- size, Medium/Large scale text+padding+spacing up.
+			        -- [Feature: Notification Size] Standard keeps the original
+			        -- size, Plus scales text+padding+spacing up slightly.
 			        do
-			            local SizeMap = {Small = 1, Medium = 1.2, Large = 1.3}
-			            local ScaleToName = {[1] = "Small", [1.2] = "Medium", [1.3] = "Large"}
+			            local SizeMap = {Standard = 1, Plus = 1.15}
+			            local ScaleToName = {[1] = "Standard", [1.15] = "Plus"}
 			            AccessibilitySection:Dropdown({
 			                Name = "Notification Size",
 			                Flag = "NotificationSize",
-			                Items = {"Small", "Medium", "Large"},
-			                Default = ScaleToName[Library.NotificationScale] or "Small",
+			                Items = {"Standard", "Plus"},
+			                Default = ScaleToName[Library.NotificationScale] or "Standard",
 			                Callback = function(Value)
 			                    Library.NotificationScale = SizeMap[Value] or 1
 			                    SaveLibrarySettings()
