@@ -7780,7 +7780,8 @@ end)
 			    end
 
 			    -- [Container: General] Watermark, keybind list visibility,
-			    -- title position, unknown mode and the notification size dropdown.
+			    -- unknown mode, the menu keybind, and the quick-action buttons
+			    -- (Panic/Rejoin/Serverhop). Merged into a single container.
 			    local GeneralSection = SettingsSubPage:Section({Name = "General", Side = 1}) do
 			        GeneralSection:Toggle({
 			            Name = "Watermark",
@@ -7804,11 +7805,71 @@ end)
 			        })
 			        TableInsert(PersistedFlags, "Keybind list")
 
+			        -- [Feature: Unknown Mode] Hides the player profile box
+			        -- entirely. Whether this shows up at all is a dev-level
+			        -- switch (Library.AllowUnknownMode), not configurable
+			        -- from the loading script.
+			        if Library.AllowUnknownMode then
+			            GeneralSection:Toggle({
+			                Name = "Unknown Mode",
+			                Flag = "UnknownMode",
+			                Default = false,
+			                Callback = function(Value)
+			                    if Window and Window.ApplyUnknownMode then
+			                        Window.ApplyUnknownMode(Value)
+			                    end
+			                    SaveLibrarySettings()
+			                end
+			            })
+			            TableInsert(PersistedFlags, "UnknownMode")
+			        end
+
+			        GeneralSection:Label("UI Keybind"):Keybind({
+			            Name = "Menu keybind",
+			            Flag = "UIKeybind",
+			            Default = Library.MenuKeybind,
+			            Mode = "Toggle",
+			            Callback = function()
+			                Library.MenuKeybind = Library.Flags["UIKeybind"].Key
+			                SaveLibrarySettings()
+			            end
+			        })
+			        TableInsert(PersistedFlags, "UIKeybind")
+
+			        -- [Feature: Quick Actions] One-shot actions, no persisted
+			        -- state, kept in the same container as the rest of General.
+			        GeneralSection:Button():Add("Panic / Emergency Close", function()
+			            Library:Notification("Emergency Close", "Script unloaded and game state restored.", 5)
+			            Library:Unload()
+			        end)
+
+			        GeneralSection:Button():Add("Rejoin", function()
+			            local TeleportService = game:GetService("TeleportService")
+			            local Players = game:GetService("Players")
+			            local LocalPlayer = Players.LocalPlayer
+			            if LocalPlayer then
+			                TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+			            end
+			        end)
+
+			        GeneralSection:Button():Add("Serverhop", function()
+			            local TeleportService = game:GetService("TeleportService")
+			            local Players = game:GetService("Players")
+			            local LocalPlayer = Players.LocalPlayer
+			            if LocalPlayer then
+			                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+			            end
+			        end)
+			    end
+
+			    -- [Container: Accessibility] Title position and notification size,
+			    -- since both affect how comfortably the user can read the UI.
+			    local AccessibilitySection = SettingsSubPage:Section({Name = "Accessibility", Side = 2}) do
 			        -- [Feature: Title] User can reposition or hide the window title
 			        if Library.TitleText ~= "" then
 			            local CurrentPos = Library.TitlePosition
 			            local PosMap = {Topbar = "Topbar", Logo = "Logo box", None = "None"}
-			            GeneralSection:Dropdown({
+			            AccessibilitySection:Dropdown({
 			                Name = "Title Position",
 			                Flag = "TitlePosition",
 			                Items = {"Topbar", "Logo box", "None"},
@@ -7830,31 +7891,12 @@ end)
 			            TableInsert(PersistedFlags, "TitlePosition")
 			        end
 
-			        -- [Feature: Unknown Mode] Hides the player profile box
-			        -- entirely. Whether this shows up at all is a dev-level
-			        -- switch (Library.AllowUnknownMode), not configurable
-			        -- from the loading script.
-			        if Library.AllowUnknownMode then
-			            GeneralSection:Toggle({
-			                Name = "Unknown Mode",
-			                Flag = "UnknownMode",
-			                Default = false,
-			                Callback = function(Value)
-			                    if Window and Window.ApplyUnknownMode then
-			                        Window.ApplyUnknownMode(Value)
-			                    end
-			                    SaveLibrarySettings()
-			                end
-			            })
-			            TableInsert(PersistedFlags, "UnknownMode")
-			        end
-
 			        -- [Feature: Notification Size] Small keeps the original
 			        -- size, Medium/Large scale text+padding+spacing up.
 			        do
 			            local SizeMap = {Small = 1, Medium = 1.2, Large = 1.3}
 			            local ScaleToName = {[1] = "Small", [1.2] = "Medium", [1.3] = "Large"}
-			            GeneralSection:Dropdown({
+			            AccessibilitySection:Dropdown({
 			                Name = "Notification Size",
 			                Flag = "NotificationSize",
 			                Items = {"Small", "Medium", "Large"},
@@ -7866,18 +7908,6 @@ end)
 			            })
 			            TableInsert(PersistedFlags, "NotificationSize")
 			        end
-
-			        GeneralSection:Label("UI Keybind"):Keybind({
-			            Name = "Menu keybind",
-			            Flag = "UIKeybind",
-			            Default = Library.MenuKeybind,
-			            Mode = "Toggle",
-			            Callback = function()
-			                Library.MenuKeybind = Library.Flags["UIKeybind"].Key
-			                SaveLibrarySettings()
-			            end
-			        })
-			        TableInsert(PersistedFlags, "UIKeybind")
 			    end
 
 			    -- [Container: Animation] Fade/tween timing, with a Reset button
@@ -7950,33 +7980,6 @@ end)
 			            TweenStyleDropdown:Set(AnimationDefaults.TweenStyle)
 			            TweenDirectionDropdown:Set(AnimationDefaults.TweenDirection)
 			            SaveLibrarySettings()
-			        end)
-			    end
-
-			    -- [Container: Actions] Panic/Rejoin/Serverhop, grouped on their
-			    -- own since they're one-shot actions rather than saved settings.
-			    local ActionsSection = SettingsSubPage:Section({Name = "Actions", Side = 1}) do
-			        ActionsSection:Button():Add("Panic / Emergency Close", function()
-			            Library:Notification("Emergency Close", "Script unloaded and game state restored.", 5)
-			            Library:Unload()
-			        end)
-
-			        ActionsSection:Button():Add("Rejoin", function()
-			            local TeleportService = game:GetService("TeleportService")
-			            local Players = game:GetService("Players")
-			            local LocalPlayer = Players.LocalPlayer
-			            if LocalPlayer then
-			                TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-			            end
-			        end)
-
-			        ActionsSection:Button():Add("Serverhop", function()
-			            local TeleportService = game:GetService("TeleportService")
-			            local Players = game:GetService("Players")
-			            local LocalPlayer = Players.LocalPlayer
-			            if LocalPlayer then
-			                TeleportService:Teleport(game.PlaceId, LocalPlayer)
-			            end
 			        end)
 			    end
 
