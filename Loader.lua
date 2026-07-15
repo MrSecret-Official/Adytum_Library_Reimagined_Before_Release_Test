@@ -130,6 +130,12 @@ local Library do
         ActivePreset  = "Default",
         AllowThemePresets = true,   -- dev sets false to hide preset picker from users
 
+        -- [Feature: High Contrast Mode] When true, colours are mathematically
+        -- boosted for contrast (see ComputeHighContrastTheme/SetHighContrast)
+        -- and key colour roles are locked against manual editing.
+        HighContrast = false,
+        HighContrastSnapshot = nil,
+
         -- [Feature: Config Export] Toggle export/import buttons in settings
         AllowConfigExport = true,   -- dev sets false to disable
 
@@ -149,6 +155,26 @@ local Library do
         -- text size/padding/spacing. Changed via the "Notification Size"
         -- dropdown in Settings (Small = 1, Medium = 1.2, Large = 1.3).
         NotificationScale = 1,
+
+        -- [Feature: UI Scale] Multiplier applied to the whole window via a
+        -- UIScale instance (set on Library.WindowUIScale once the window is
+        -- built). Kept in controlled 5% steps by the "UI Scale" slider.
+        UIScale = 1,
+        WindowUIScale = nil,
+
+        -- [Feature: Font Size] Multiplier applied to every text label's
+        -- base TextSize (labels, toggles, buttons, dropdowns, etc.),
+        -- independent from Notification Size. Every TextLabel/TextButton/
+        -- TextBox created through Instances:Create self-registers into
+        -- FontItems so RescaleFonts can update them all live.
+        FontScale = 1,
+        FontItems = { },
+
+        -- [Feature: Reduce Motion] Snapshot of the animation settings the
+        -- user had before turning Reduce Motion on, so turning it back off
+        -- restores them instead of leaving Fade/Tween time stuck at ~0.
+        ReduceMotion = false,
+        ReduceMotionSnapshot = nil,
 
         -- [Feature: Corner Radius] Per-type corner radius values and registry
         CornerRadius = {
@@ -298,6 +324,39 @@ local Library do
 			["Placeholder Text"]= FromRGB(200, 160, 140),
 			["Accent"]          = FromRGB(255, 100, 50)
 		},
+		-- [Feature: Colorblind Presets] Blue/orange pairing avoids the
+		-- red-green confusion that affects deuteranopia and protanopia,
+		-- the two most common forms of colorblindness.
+		["ColorblindRG"] = {
+			["Background"]      = FromRGB(10, 10, 12),
+			["Border"]          = FromRGB(28, 28, 32),
+			["Inline"]          = FromRGB(18, 18, 20),
+			["Hovered Element"] = FromRGB(50, 70, 110),
+			["Page Background"] = FromRGB(14, 14, 16),
+			["Outline"]         = FromRGB(70, 100, 150),
+			["Element"]         = FromRGB(22, 22, 26),
+			["Gradient"]        = FromRGB(255, 140, 0),
+			["Text"]            = FromRGB(240, 240, 245),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(160, 160, 170),
+			["Accent"]          = FromRGB(255, 140, 0)
+		},
+		-- [Feature: Colorblind Presets] Magenta/teal pairing avoids the
+		-- blue-yellow confusion that affects tritanopia.
+		["ColorblindBY"] = {
+			["Background"]      = FromRGB(8, 10, 10),
+			["Border"]          = FromRGB(22, 30, 28),
+			["Inline"]          = FromRGB(14, 18, 17),
+			["Hovered Element"] = FromRGB(90, 40, 80),
+			["Page Background"] = FromRGB(11, 14, 13),
+			["Outline"]         = FromRGB(140, 60, 120),
+			["Element"]         = FromRGB(18, 24, 22),
+			["Gradient"]        = FromRGB(220, 40, 140),
+			["Text"]            = FromRGB(235, 245, 240),
+			["Text Stroke"]     = FromRGB(0, 0, 0),
+			["Placeholder Text"]= FromRGB(150, 170, 165),
+			["Accent"]          = FromRGB(0, 190, 160)
+		},
     }
 
     Library.Theme = TableClone(Themes["Preset"])
@@ -306,6 +365,10 @@ local Library do
     Library.ThemePresets["Default"]  = TableClone(Themes["Preset"])
     Library.ThemePresets["Midnight"] = TableClone(Themes["Midnight"])
     Library.ThemePresets["Ember"]    = TableClone(Themes["Ember"])
+    -- [Feature: Colorblind Presets] Indicative display names so users can
+    -- tell at a glance which kind of colorblindness each one is safe for
+    Library.ThemePresets["Colorblind (Red-Green Safe)"]  = TableClone(Themes["ColorblindRG"])
+    Library.ThemePresets["Colorblind (Blue-Yellow Safe)"] = TableClone(Themes["ColorblindBY"])
 
     -- Folders
     for Index, Value in Library.Folders do 
@@ -323,6 +386,9 @@ local Library do
     -- to ActiveThemeFile in real time via SaveActiveTheme.
     Library.ActivePresetFile = Library.Folders.Directory .. "/ActivePreset.txt"
     Library.ActiveThemeFile  = Library.Folders.Directory .. "/ActiveTheme.json"
+    -- [Feature: High Contrast Mode] Restored further below, once
+    -- SetHighContrast is defined (this file only records on/off).
+    Library.HighContrastFile = Library.Folders.Directory .. "/HighContrast.txt"
 
     Library.SaveActivePreset = function(self, Name)
         pcall(writefile, self.ActivePresetFile, Name)
@@ -477,6 +543,14 @@ local Library do
 
             for Property, Value in NewItem.Properties do
                 NewItem.Instance[Property] = Value
+            end
+
+            -- [Feature: Font Size] Any text object created with an explicit
+            -- TextSize self-registers so the global Font Size slider can
+            -- rescale it later. Applying the current FontScale immediately
+            -- keeps behaviour identical to before when FontScale is 1.
+            if Properties.TextSize and (Class == "TextLabel" or Class == "TextButton" or Class == "TextBox") then
+                Library:RegisterFontItem(NewItem.Instance, Properties.TextSize)
             end
 
             return NewItem
@@ -1456,6 +1530,67 @@ local Library do
         end
     end
 
+    -- [Feature: Font Size] Register a text Instance's base TextSize so
+    -- SetFontScale can rescale it later. Called automatically by
+    -- Instances:Create for every TextLabel/TextButton/TextBox, so this
+    -- covers the whole library's text without touching each call site.
+    Library.RegisterFontItem = function(self, TextInstance, BaseSize)
+        TableInsert(self.FontItems, {Instance = TextInstance, Base = BaseSize})
+        TextInstance.TextSize = MathFloor((BaseSize * self.FontScale) + 0.5)
+    end
+
+    -- [Feature: Font Size] Rescale every registered text Instance. Skips
+    -- entries whose Instance has been destroyed/unparented (e.g. a closed
+    -- notification) instead of erroring on them.
+    Library.SetFontScale = function(self, Scale)
+        Scale = MathClamp(Scale, 0.85, 1.25)
+        self.FontScale = Scale
+        for _, Item in self.FontItems do
+            if Item.Instance and Item.Instance.Parent then
+                Item.Instance.TextSize = MathFloor((Item.Base * Scale) + 0.5)
+            end
+        end
+    end
+
+    -- [Feature: UI Scale] Scales the whole window (size, position and, as a
+    -- side effect of how UIScale works, text too) via the UIScale instance
+    -- parented under the main window frame.
+    Library.SetUIScale = function(self, Scale)
+        Scale = MathClamp(Scale, 0.85, 1.2)
+        self.UIScale = Scale
+        if self.WindowUIScale then
+            self.WindowUIScale.Scale = Scale
+        end
+    end
+
+    -- [Feature: Reduce Motion] Forces tweens to be effectively instant
+    -- (Fade/Tween time ~0) for users sensitive to motion or who just want
+    -- the UI to respond immediately. Snapshots the previous Fade/Tween time
+    -- so turning it back off restores whatever the user had configured,
+    -- rather than leaving them at 0. The Settings UI is responsible for
+    -- greying out / locking the Animation controls while this is on
+    -- (see the Accessibility section wiring in SettingsSubPage).
+    Library.SetReduceMotion = function(self, Bool)
+        self.ReduceMotion = Bool
+
+        if Bool then
+            if not self.ReduceMotionSnapshot then
+                self.ReduceMotionSnapshot = {
+                    FadeSpeed = self.FadeSpeed,
+                    TweenTime = self.Tween.Time,
+                }
+            end
+            self.FadeSpeed   = 0.01
+            self.Tween.Time  = 0.01
+        else
+            if self.ReduceMotionSnapshot then
+                self.FadeSpeed  = self.ReduceMotionSnapshot.FadeSpeed
+                self.Tween.Time = self.ReduceMotionSnapshot.TweenTime
+                self.ReduceMotionSnapshot = nil
+            end
+        end
+    end
+
     -- [Feature: Theme Presets] Register a developer-defined colour preset
     Library.RegisterThemePreset = function(self, Name, ColorTable)
         self.ThemePresets[Name] = TableClone(ColorTable)
@@ -1468,6 +1603,123 @@ local Library do
         self.ActivePreset = Name
         for Key, Color in Preset do
             self:ChangeTheme(Key, Color)
+        end
+        -- [Feature: High Contrast Mode] Switching preset while High Contrast
+        -- is on should re-derive the HC colours from the new preset, not
+        -- leave the old preset's HC-boosted colours applied on top of it.
+        if self.HighContrast then
+            self:SetHighContrast(true)
+        end
+    end
+
+    -- [Feature: High Contrast Mode] WCAG-style relative luminance (0-1) of a Color3
+    local function RelativeLuminance(Color)
+        local function Lin(C)
+            return C <= 0.03928 and (C / 12.92) or ((C + 0.055) / 1.055) ^ 2.4
+        end
+        return 0.2126 * Lin(Color.R) + 0.7152 * Lin(Color.G) + 0.0722 * Lin(Color.B)
+    end
+
+    -- [Feature: High Contrast Mode] WCAG contrast ratio (1-21) between two colours
+    local function ContrastRatio(A, B)
+        local L1, L2 = RelativeLuminance(A), RelativeLuminance(B)
+        if L1 < L2 then L1, L2 = L2, L1 end
+        return (L1 + 0.05) / (L2 + 0.05)
+    end
+
+    -- [Feature: High Contrast Mode] Nudges a colour's HSV Value up or down in
+    -- small steps, keeping its Hue/Saturation, until it clears TargetRatio
+    -- contrast against Background (or bottoms/tops out trying).
+    local function BoostContrast(Color, Background, TargetRatio, Brighten)
+        local H, S, V = Color:ToHSV()
+        for _ = 1, 24 do
+            if ContrastRatio(Color, Background) >= TargetRatio then
+                break
+            end
+            V = MathClamp(V + (Brighten and 0.04 or -0.04), 0, 1)
+            Color = Color3.fromHSV(H, S, V)
+            if (Brighten and V >= 1) or ((not Brighten) and V <= 0) then
+                break
+            end
+        end
+        return Color
+    end
+
+    -- [Feature: High Contrast Mode] Keys whose colours are mathematically
+    -- derived for contrast and therefore locked against manual editing
+    -- (Colors section + Custom theme) while High Contrast Mode is active.
+    Library.HighContrastLockedKeys = {
+        ["Background"] = true, ["Page Background"] = true, ["Inline"] = true, ["Element"] = true,
+        ["Text"] = true, ["Placeholder Text"] = true, ["Border"] = true, ["Outline"] = true,
+        ["Accent"] = true, ["Gradient"] = true, ["Hovered Element"] = true,
+    }
+
+    -- [Feature: High Contrast Mode] Given any theme colour table, returns a
+    -- new table with backgrounds pushed darker and text/borders/accents
+    -- pushed brighter until they clear solid WCAG contrast ratios against
+    -- the (now-darkened) background — computed automatically, not hand-picked.
+    Library.ComputeHighContrastTheme = function(self, BaseTheme)
+        local Result = TableClone(BaseTheme)
+
+        for _, Key in { "Background", "Page Background", "Inline", "Element" } do
+            if Result[Key] then
+                local H, S, V = Result[Key]:ToHSV()
+                Result[Key] = Color3.fromHSV(H, S, MathClamp(V * 0.35, 0, 0.12))
+            end
+        end
+
+        local Bg = Result["Background"]
+
+        if Result["Text"] then
+            Result["Text"] = BoostContrast(Result["Text"], Bg, 7, true)
+        end
+        if Result["Placeholder Text"] then
+            Result["Placeholder Text"] = BoostContrast(Result["Placeholder Text"], Bg, 4.5, true)
+        end
+        for _, Key in { "Border", "Outline" } do
+            if Result[Key] then
+                Result[Key] = BoostContrast(Result[Key], Bg, 3, true)
+            end
+        end
+        for _, Key in { "Accent", "Gradient", "Hovered Element" } do
+            if Result[Key] then
+                Result[Key] = BoostContrast(Result[Key], Bg, 4.5, true)
+            end
+        end
+
+        return Result
+    end
+
+    -- [Feature: High Contrast Mode] Toggles it on/off. Turning on snapshots
+    -- the current (pre-HC) theme so turning back off restores it exactly,
+    -- rather than leaving the boosted colours in place.
+    Library.SetHighContrast = function(self, Bool)
+        self.HighContrast = Bool
+
+        if Bool then
+            self.HighContrastSnapshot = TableClone(self.Theme)
+            local HC = self:ComputeHighContrastTheme(self.Theme)
+            for Key, Color in HC do
+                self:ChangeTheme(Key, Color)
+            end
+            self:RefreshThemeColorpickers()
+        else
+            if self.HighContrastSnapshot then
+                for Key, Color in self.HighContrastSnapshot do
+                    self:ChangeTheme(Key, Color)
+                end
+                self:RefreshThemeColorpickers()
+            end
+            self.HighContrastSnapshot = nil
+        end
+    end
+
+    -- [Feature: High Contrast Mode] Restore on/off state saved from a
+    -- previous session (the toggle above writes this file on change).
+    if isfile(Library.HighContrastFile) then
+        local Ok, Saved = pcall(readfile, Library.HighContrastFile)
+        if Ok and Saved == "true" then
+            Library:SetHighContrast(true)
         end
     end
 
@@ -1643,6 +1895,18 @@ local Library do
                 WinCorner.Name = "\0"
                 WinCorner.Parent = Items["Window"].Instance
                 Library:RegisterCorner(WinCorner, "Window")
+
+                -- [Feature: UI Scale] Global UIScale for the whole window
+                -- (parented directly in the window frame so it scales the
+                -- window itself plus every descendant, text included).
+                -- Exposed on Library so the Accessibility "UI Scale" slider
+                -- can drive it later, and applies whatever scale was
+                -- already restored from saved settings.
+                local WinUIScale = InstanceNew("UIScale")
+                WinUIScale.Name = "\0"
+                WinUIScale.Scale = Library.UIScale or 1
+                WinUIScale.Parent = Items["Window"].Instance
+                Library.WindowUIScale = WinUIScale
             end
 
             return Items
@@ -2515,7 +2779,16 @@ local Library do
                     SubItems["Text"]:TextBorder()
                 end
 
+                NewButton.Enabled = true
+
                 function NewButton:Press()
+                    -- [Feature: Reduce Motion] Real gating, not just the grey
+                    -- text below: a disabled button (e.g. Reset while Reduce
+                    -- Motion is on) must not fire its callback at all.
+                    if NewButton.Enabled == false then
+                        return
+                    end
+
                     SubItems["NewButton"]:ChangeItemTheme({BackgroundColor3 = "Accent", BorderColor3 = "Border"})
                     SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = Library.Theme.Accent})
 
@@ -2538,6 +2811,7 @@ local Library do
                 -- config selected) and turns it back to normal text color
                 -- once there is, as a visual cue rather than just failing silently.
                 function NewButton:SetEnabled(Bool)
+                    NewButton.Enabled = Bool
                     SubItems["Text"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
                     SubItems["Text"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
                 end
@@ -2705,6 +2979,8 @@ local Library do
                 Items["Value"]:TextBorder()
             end
 
+            Slider.Enabled = true
+
             function Slider:Get()
                 return Slider.Value
             end
@@ -2713,13 +2989,41 @@ local Library do
                 Items["Slider"].Instance.Visible = Bool
             end
 
-            function Slider:Set(Value)
+            -- [Feature: Reduce Motion] Greys the label/value text out and,
+            -- crucially, actually blocks the slider from being moved or set
+            -- (not just a visual cue) while disabled. Optional OverrideText
+            -- replaces the displayed value (e.g. "Reduce Motion") while locked.
+            function Slider:SetEnabled(Bool, OverrideText)
+                Slider.Enabled = Bool
+                Items["Text"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
+                Items["Text"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
+                Items["Value"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
+                Items["Value"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
+
+                if not Bool and OverrideText then
+                    Items["Value"].Instance.Text = OverrideText
+                elseif Bool then
+                    -- Restore the real value text now that it's usable again
+                    Items["Value"].Instance.Text = StringFormat("%s%s", tostring(Slider.Value), Data.Suffix)
+                end
+            end
+
+            function Slider:Set(Value, Force)
+                if Slider.Enabled == false and not Force then
+                    return
+                end
+
                 Slider.Value = Library:Round(MathClamp(Value, Data.Min, Data.Max), Data.Decimals)
 
                 Library.Flags[Slider.Flag] = Slider.Value
 
                 Items["Accent"]:Tween(TweenInfo.new(Library.Tween.Time, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New((Slider.Value - Data.Min) / (Data.Max - Data.Min), 0, 1, 0)})
-                Items["Value"].Instance.Text = StringFormat("%s%s", tostring(Slider.Value), Data.Suffix)
+
+                -- Don't clobber a locked override label (e.g. "Reduce Motion")
+                -- with the raw numeric value while the slider is disabled.
+                if Slider.Enabled ~= false then
+                    Items["Value"].Instance.Text = StringFormat("%s%s", tostring(Slider.Value), Data.Suffix)
+                end
 
                 if Data.Callback then 
                     Library:SafeCall(Data.Callback, Slider.Value)
@@ -2742,6 +3046,10 @@ local Library do
             local InputChanged
 
             Items["RealSlider"]:Connect("InputBegan", function(Input)
+                if Slider.Enabled == false then
+                    return
+                end
+
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                     Slider.Sliding = true 
 
@@ -2871,7 +3179,9 @@ local Library do
                 Flag = Data.Flag, 
                 Value = { },
                 Options = { },
-                IsOpen = false
+                IsOpen = false,
+                Enabled = true,
+                LockedText = nil
             }
 
             local Items = { } do
@@ -3008,11 +3318,46 @@ local Library do
                 return Dropdown.Value
             end
 
+            -- [Feature: Reduce Motion] Greys the dropdown out, forces it
+            -- closed, and blocks it from being opened/changed while disabled.
+            -- OverrideText (e.g. "Reduce Motion") is shown instead of the
+            -- real value while locked, and restored when re-enabled.
+            function Dropdown:SetEnabled(Bool, OverrideText)
+                Dropdown.Enabled = Bool
+                Dropdown.LockedText = (not Bool) and OverrideText or nil
+
+                Items["Text"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
+                Items["Text"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
+                Items["Value"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
+                Items["Value"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
+
+                if not Bool then
+                    if Dropdown.IsOpen then
+                        Dropdown:SetOpen(false)
+                    end
+                    if OverrideText then
+                        Items["Value"].Instance.Text = OverrideText
+                    end
+                else
+                    -- Restore whatever the real selected value is
+                    local Display = Dropdown.Value
+                    if Data.Multi and type(Display) == "table" then
+                        Items["Value"].Instance.Text = TableConcat(Display, ", ")
+                    elseif Display and Display ~= "" then
+                        Items["Value"].Instance.Text = Display
+                    end
+                end
+            end
+
             local Debounce = false
             local RenderStepped  
 
             function Dropdown:SetOpen(Bool)
                 if Debounce then 
+                    return
+                end
+
+                if Dropdown.Enabled == false and Bool then
                     return
                 end
 
@@ -3093,6 +3438,10 @@ local Library do
             end
 
             function Dropdown:Set(Option)
+                if Dropdown.Enabled == false then
+                    return
+                end
+
                 if Data.Multi then 
                     if type(Option) ~= "table" then 
                         return
@@ -7280,6 +7629,20 @@ end)
                             end
                         })
                     end
+
+                    -- [Feature: High Contrast Mode] Mathematically boosts the
+                    -- current theme's colours for contrast and locks the key
+                    -- roles in the Colors section (and in Custom theming)
+                    -- against manual editing while it's active.
+                    ThemesSection:Toggle({
+                        Name = "High Contrast Mode",
+                        Flag = "HighContrast",
+                        Default = Library.HighContrast or false,
+                        Callback = function(Value)
+                            Library:SetHighContrast(Value)
+                            pcall(writefile, Library.HighContrastFile, tostring(Value))
+                        end
+                    })
                 end
 
                 -- Colors section: per-colour colorpickers on Side=1 (LEFT),
@@ -7295,6 +7658,17 @@ end)
                                 -- Suppressed during batch refresh so preset
                                 -- dropdown doesn't re-flip to "Custom".
                                 if Library._SuppressThemeCallbacks then return end
+
+                                -- [Feature: High Contrast Mode] Key colour
+                                -- roles are mathematically derived for
+                                -- contrast; block manual edits to them while
+                                -- HC is on and snap the picker back to the
+                                -- actual (locked) applied colour.
+                                if Library.HighContrast and Library.HighContrastLockedKeys[Index] then
+                                    Library:Notification("Warning", Index .. " is locked while High Contrast Mode is enabled.", 3)
+                                    Library:RefreshThemeColorpickers()
+                                    return
+                                end
 
                                 Library.Theme[Index] = Value
                                 Library:ChangeTheme(Index, Value)
@@ -7878,8 +8252,16 @@ end)
 			        end)
 			    end
 
-			    -- [Container: Accessibility] Title position and notification size,
-			    -- since both affect how comfortably the user can read the UI.
+			    -- Forward-declared so the Accessibility section's Reduce Motion
+			    -- toggle (built first) can reach into and gate the Animation
+			    -- controls (built further below) once they exist. The toggle's
+			    -- Callback only actually runs later, once the user interacts
+			    -- with it, by which point all of these are populated.
+			    local FadeSlider, TweenTimeSlider, TweenStyleDropdown, TweenDirectionDropdown, ResetButton
+
+			    -- [Container: Accessibility] Title position, notification size,
+			    -- UI scale, font size, and reduce motion — anything that affects
+			    -- how comfortably the user can read/use the UI.
 			    local AccessibilitySection = SettingsSubPage:Section({Name = "Accessibility", Side = 2}) do
 			        -- [Feature: Title] User can reposition or hide the window title
 			        if Library.TitleText ~= "" then
@@ -7924,6 +8306,69 @@ end)
 			            })
 			            TableInsert(PersistedFlags, "NotificationSize")
 			        end
+
+			        -- [Feature: UI Scale] Global window scale, in controlled 5%
+			        -- steps so it can't be dragged into something broken/unreadable.
+			        -- Percent display keeps it friendly rather than a raw 0.85-1.2 float.
+			        do
+			            local UIScaleSlider
+			            UIScaleSlider = AccessibilitySection:Slider({
+			                Name = "UI Scale",
+			                Flag = "UIScale",
+			                Default = MathFloor((Library.UIScale or 1) * 100 + 0.5),
+			                Min = 85,
+			                Max = 120,
+			                Decimals = 5,
+			                Suffix = "%",
+			                Callback = function(Value)
+			                    Library:SetUIScale(Value / 100)
+			                    SaveLibrarySettings()
+			                end
+			            })
+			            TableInsert(PersistedFlags, "UIScale")
+			        end
+
+			        -- [Feature: Font Size] Independent from both UI Scale and
+			        -- Notification Size — only rescales general library text
+			        -- (labels, toggles, dropdowns, etc.) via the FontItems registry.
+			        do
+			            AccessibilitySection:Slider({
+			                Name = "Font Size",
+			                Flag = "FontScale",
+			                Default = MathFloor((Library.FontScale or 1) * 100 + 0.5),
+			                Min = 85,
+			                Max = 125,
+			                Decimals = 5,
+			                Suffix = "%",
+			                Callback = function(Value)
+			                    Library:SetFontScale(Value / 100)
+			                    SaveLibrarySettings()
+			                end
+			            })
+			            TableInsert(PersistedFlags, "FontScale")
+			        end
+
+			        -- [Feature: Reduce Motion] Forces tweens to ~instant and locks
+			        -- the Animation container's controls (greyed out, dropdowns show
+			        -- "Reduce Motion" instead of their real value) so the user can't
+			        -- fight the two settings against each other while this is on.
+			        AccessibilitySection:Toggle({
+			            Name = "Reduce Motion",
+			            Flag = "ReduceMotion",
+			            Default = Library.ReduceMotion or false,
+			            Callback = function(Value)
+			                Library:SetReduceMotion(Value)
+
+			                if FadeSlider then FadeSlider:SetEnabled(not Value) end
+			                if TweenTimeSlider then TweenTimeSlider:SetEnabled(not Value) end
+			                if TweenStyleDropdown then TweenStyleDropdown:SetEnabled(not Value, "Reduce Motion") end
+			                if TweenDirectionDropdown then TweenDirectionDropdown:SetEnabled(not Value, "Reduce Motion") end
+			                if ResetButton then ResetButton:SetEnabled(not Value) end
+
+			                SaveLibrarySettings()
+			            end
+			        })
+			        TableInsert(PersistedFlags, "ReduceMotion")
 			    end
 
 			    -- [Container: Animation] Fade/tween timing, with a Reset button
@@ -7938,7 +8383,7 @@ end)
 			            TweenDirection = Library.Tween.Direction.Name,
 			        }
 
-			        local FadeSlider = AnimationSection:Slider({
+			        FadeSlider = AnimationSection:Slider({
 			            Name = "Fade time",
 			            Flag = "FadeTime",
 			            Default = Library.FadeSpeed,
@@ -7952,7 +8397,7 @@ end)
 			        })
 			        TableInsert(PersistedFlags, "FadeTime")
 
-			        local TweenTimeSlider = AnimationSection:Slider({
+			        TweenTimeSlider = AnimationSection:Slider({
 			            Name = "Tween time",
 			            Flag = "TweenTime",
 			            Default = Library.Tween.Time,
@@ -7966,7 +8411,7 @@ end)
 			        })
 			        TableInsert(PersistedFlags, "TweenTime")
 
-			        local TweenStyleDropdown = AnimationSection:Dropdown({
+			        TweenStyleDropdown = AnimationSection:Dropdown({
 			            Name = "Tween style",
 			            Flag = "Tween style",
 			            Items = { "Linear", "Quad", "Quart", "Back", "Bounce", "Circular", "Cubic", "Elastic", "Exponential", "Sine", "Quint" },
@@ -7978,7 +8423,7 @@ end)
 			        })
 			        TableInsert(PersistedFlags, "Tween style")
 
-			        local TweenDirectionDropdown = AnimationSection:Dropdown({
+			        TweenDirectionDropdown = AnimationSection:Dropdown({
 			            Name = "Tween direction",
 			            Flag = "Tween direction",
 			            Items = { "In", "Out", "InOut" },
@@ -7990,13 +8435,28 @@ end)
 			        })
 			        TableInsert(PersistedFlags, "Tween direction")
 
-			        AnimationSection:Button():Add("Reset to Default", function()
-			            FadeSlider:Set(AnimationDefaults.FadeTime)
-			            TweenTimeSlider:Set(AnimationDefaults.TweenTime)
-			            TweenStyleDropdown:Set(AnimationDefaults.TweenStyle)
-			            TweenDirectionDropdown:Set(AnimationDefaults.TweenDirection)
-			            SaveLibrarySettings()
-			        end)
+			        do
+			            local ResetButtonContainer = AnimationSection:Button()
+			            ResetButton = ResetButtonContainer:Add("Reset to Default", function()
+			                FadeSlider:Set(AnimationDefaults.FadeTime, true)
+			                TweenTimeSlider:Set(AnimationDefaults.TweenTime, true)
+			                TweenStyleDropdown:Set(AnimationDefaults.TweenStyle)
+			                TweenDirectionDropdown:Set(AnimationDefaults.TweenDirection)
+			                SaveLibrarySettings()
+			            end)
+			        end
+
+			        -- If Reduce Motion was already on (restored from saved
+			        -- settings, applied further below via LoadConfig), lock these
+			        -- controls immediately rather than waiting for the user to
+			        -- retoggle it.
+			        if Library.ReduceMotion then
+			            FadeSlider:SetEnabled(false)
+			            TweenTimeSlider:SetEnabled(false)
+			            TweenStyleDropdown:SetEnabled(false, "Reduce Motion")
+			            TweenDirectionDropdown:SetEnabled(false, "Reduce Motion")
+			            ResetButton:SetEnabled(false)
+			        end
 			    end
 
 			    -- [Feature: Settings Persistence] Restore previously-saved values
