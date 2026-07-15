@@ -1829,12 +1829,8 @@ local Library do
         -- sync the dropdown every time a theme is loaded, independent of
         -- whether it also gets persisted to disk (AutoSave).
         self.ActivePreset = "Custom"
-        print("[DEBUG] LoadThemeConfig: PresetDropdownRef =", self.PresetDropdownRef)
         if self.PresetDropdownRef then
-            print("[DEBUG] LoadThemeConfig: Options[\"Custom\"] =", self.PresetDropdownRef.Options and self.PresetDropdownRef.Options["Custom"])
-            print("[DEBUG] LoadThemeConfig: Dropdown.Enabled =", self.PresetDropdownRef.Enabled)
             self.PresetDropdownRef:Set("Custom")
-            print("[DEBUG] LoadThemeConfig: after Set, Dropdown.Value =", self.PresetDropdownRef.Value)
         end
 
         -- Refresh colorpicker UIs so they show the newly loaded colours
