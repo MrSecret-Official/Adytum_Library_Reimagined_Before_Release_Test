@@ -1570,7 +1570,11 @@ local Library do
         Scale = MathClamp(Scale, 0.85, 1.2)
         self.UIScale = Scale
         if self.WindowUIScale then
-            self.WindowUIScale.Scale = Scale
+            TweenService:Create(
+                self.WindowUIScale,
+                TweenInfo.new(self.Tween.Time, self.Tween.Style, self.Tween.Direction),
+                {Scale = Scale}
+            ):Play()
         end
     end
 
