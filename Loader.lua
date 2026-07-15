@@ -6395,7 +6395,6 @@ end)
                 TextColor3 = FromRGB(235, 235, 235),
                 TextTransparency = 0.4000000059604645,
                 Text = Description,
-                Position = UDim2New(0, 0, 0, Library:Round(15 * Scale)),
                 BorderSizePixel = 0,
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -6406,6 +6405,24 @@ end)
             })  Items["Description"]:AddToTheme({TextColor3 = "Text"})
 
             Items["UIStroke3"] = Items["Description"]:TextBorder()
+
+            -- [Fix: Notification Text Overlap] Description's Y position used
+            -- to be a fixed offset (15 * Scale) assuming Title's height at
+            -- the base 9px TextSize. Title has AutomaticSize.XY, so once
+            -- FontScale grows the title text, its real height outgrows that
+            -- fixed offset and Description gets drawn overlapping it (with
+            -- ClipsDescendants cropping most of it away). Instead, position
+            -- Description relative to Title's actual live AbsoluteSize.Y and
+            -- keep it updated any time Title's size changes (FontScale
+            -- rescale or NotificationScale).
+            local function RepositionDescription()
+                Items["Description"].Instance.Position = UDim2New(
+                    0, 0, 0, Items["Title"].Instance.AbsoluteSize.Y + Library:Round(6 * Scale)
+                )
+            end
+
+            RepositionDescription()
+            Items["Title"].Instance:GetPropertyChangedSignal("AbsoluteSize"):Connect(RepositionDescription)
 
             Items["Liner"] = Instances:Create("Frame", {
                 Parent = Items["Notification"].Instance,
