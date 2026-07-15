@@ -3157,16 +3157,32 @@ local Library do
                 end
             end
 
-            function Slider:Set(Value, Force)
+            -- [Feature: Slider Precision] SkipTween=true (used while actively
+            -- dragging) snaps the fill bar to the new position instantly so
+            -- it tracks the mouse 1:1 with no lag, instead of chasing it
+            -- behind a Library.Tween.Time tween. Programmatic calls (Default,
+            -- SetFlags, drag release settle) still tween normally.
+            -- Also: the Callback/flag only fires when the rounded Value
+            -- actually changes, not on every single mouse-move pixel, so the
+            -- slider only "commits" once the drag has actually reached a new
+            -- step instead of spamming updates on the way there.
+            function Slider:Set(Value, Force, SkipTween)
                 if Slider.Enabled == false and not Force then
                     return
                 end
 
-                Slider.Value = Library:Round(MathClamp(Value, Data.Min, Data.Max), Data.Decimals)
+                local NewValue = Library:Round(MathClamp(Value, Data.Min, Data.Max), Data.Decimals)
+                local Changed = NewValue ~= Slider.Value
 
+                Slider.Value = NewValue
                 Library.Flags[Slider.Flag] = Slider.Value
 
-                Items["Accent"]:Tween(TweenInfo.new(Library.Tween.Time, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New((Slider.Value - Data.Min) / (Data.Max - Data.Min), 0, 1, 0)})
+                local FillScale = (Slider.Value - Data.Min) / (Data.Max - Data.Min)
+                if SkipTween then
+                    Items["Accent"].Instance.Size = UDim2New(FillScale, 0, 1, 0)
+                else
+                    Items["Accent"]:Tween(TweenInfo.new(Library.Tween.Time, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New(FillScale, 0, 1, 0)})
+                end
 
                 -- Don't clobber a locked override label (e.g. "Reduce Motion")
                 -- with the raw numeric value while the slider is disabled.
@@ -3174,9 +3190,18 @@ local Library do
                     Items["Value"].Instance.Text = StringFormat("%s%s", tostring(Slider.Value), Data.Suffix)
                 end
 
-                if Data.Callback then 
+                if Changed and Data.Callback then
                     Library:SafeCall(Data.Callback, Slider.Value)
                 end
+            end
+
+            -- [Feature: Slider Precision] Converts a mouse X position into a
+            -- 0-1 fraction across the slider track, clamped so dragging past
+            -- either edge still resolves cleanly to Min/Max instead of an
+            -- out-of-range fraction.
+            local function GetMouseFraction()
+                local SizeX = (Mouse.X - Items["RealSlider"].Instance.AbsolutePosition.X) / Items["RealSlider"].Instance.AbsoluteSize.X
+                return MathClamp(SizeX, 0, 1)
             end
 
             --[[
@@ -3202,10 +3227,9 @@ local Library do
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                     Slider.Sliding = true 
 
-                    local SizeX = (Mouse.X - Items["RealSlider"].Instance.AbsolutePosition.X) / Items["RealSlider"].Instance.AbsoluteSize.X
-                    local Value = ((Data.Max - Data.Min) * SizeX) + Data.Min
+                    local Value = ((Data.Max - Data.Min) * GetMouseFraction()) + Data.Min
 
-                    Slider:Set(Value)
+                    Slider:Set(Value, false, true)
 
                     if InputChanged then
                         return
@@ -3225,10 +3249,9 @@ local Library do
             Library:Connect(UserInputService.InputChanged, function(Input)
                 if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
                     if Slider.Sliding then
-                        local SizeX = (Mouse.X - Items["RealSlider"].Instance.AbsolutePosition.X) / Items["RealSlider"].Instance.AbsoluteSize.X
-                        local Value = ((Data.Max - Data.Min) * SizeX) + Data.Min
+                        local Value = ((Data.Max - Data.Min) * GetMouseFraction()) + Data.Min
 
-                        Slider:Set(Value)
+                        Slider:Set(Value, false, true)
                     end
                 end
             end)
