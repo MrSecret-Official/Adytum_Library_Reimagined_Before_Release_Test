@@ -7748,30 +7748,67 @@ end)
             end
 
 			local SettingsSubPage = SettingsPage:SubPage({Name = "Settings", Columns = 2}) do 
-			    local SettingsSection = SettingsSubPage:Section({Name = "Settings", Side = 1}) do
-			        SettingsSection:Toggle({
+
+			    -- [Feature: Settings Persistence] Silently save/restore this
+			    -- Settings subpage's own controls (general options + animation
+			    -- timing) across sessions, with zero notifications so the user
+			    -- is never interrupted. Buttons (Panic/Rejoin/Serverhop) have
+			    -- no state, so they're intentionally left out of this list.
+			    local SettingsSaveFile = Library.Folders.Directory .. "/LibrarySettings.json"
+			    local PersistedFlags = { }
+
+			    local function SaveLibrarySettings()
+			        Library:SafeCall(function()
+			            local Data = { }
+
+			            for _, FlagName in PersistedFlags do
+			                local Value = Library.Flags[FlagName]
+
+			                if Value == nil then
+			                    continue
+			                end
+
+			                if type(Value) == "table" and Value.Key then
+			                    Data[FlagName] = {Key = tostring(Value.Key), Mode = Value.Mode}
+			                else
+			                    Data[FlagName] = Value
+			                end
+			            end
+
+			            writefile(SettingsSaveFile, HttpService:JSONEncode(Data))
+			        end)
+			    end
+
+			    -- [Container: General] Watermark, keybind list visibility,
+			    -- title position, unknown mode and the notification size dropdown.
+			    local GeneralSection = SettingsSubPage:Section({Name = "General", Side = 1}) do
+			        GeneralSection:Toggle({
 			            Name = "Watermark",
 			            Flag = "Watermark",
 			            Default = true,
 			            Callback = function(Value)
 			                Watermark:SetVisibility(Value)
+			                SaveLibrarySettings()
 			            end
 			        })
-			
-			        SettingsSection:Toggle({
+			        TableInsert(PersistedFlags, "Watermark")
+
+			        GeneralSection:Toggle({
 			            Name = "Keybind list",
 			            Flag = "Keybind list",
 			            Default = true,
 			            Callback = function(Value)
 			                KeybindList:SetVisibility(Value)
+			                SaveLibrarySettings()
 			            end
 			        })
+			        TableInsert(PersistedFlags, "Keybind list")
 
 			        -- [Feature: Title] User can reposition or hide the window title
 			        if Library.TitleText ~= "" then
 			            local CurrentPos = Library.TitlePosition
 			            local PosMap = {Topbar = "Topbar", Logo = "Logo box", None = "None"}
-			            SettingsSection:Dropdown({
+			            GeneralSection:Dropdown({
 			                Name = "Title Position",
 			                Flag = "TitlePosition",
 			                Items = {"Topbar", "Logo box", "None"},
@@ -7787,8 +7824,10 @@ end)
 			                    if Window and Window.ApplyTitlePosition then
 			                        Window.ApplyTitlePosition(Pos)
 			                    end
+			                    SaveLibrarySettings()
 			                end
 			            })
+			            TableInsert(PersistedFlags, "TitlePosition")
 			        end
 
 			        -- [Feature: Unknown Mode] Hides the player profile box
@@ -7796,7 +7835,7 @@ end)
 			        -- switch (Library.AllowUnknownMode), not configurable
 			        -- from the loading script.
 			        if Library.AllowUnknownMode then
-			            SettingsSection:Toggle({
+			            GeneralSection:Toggle({
 			                Name = "Unknown Mode",
 			                Flag = "UnknownMode",
 			                Default = false,
@@ -7804,8 +7843,10 @@ end)
 			                    if Window and Window.ApplyUnknownMode then
 			                        Window.ApplyUnknownMode(Value)
 			                    end
+			                    SaveLibrarySettings()
 			                end
 			            })
+			            TableInsert(PersistedFlags, "UnknownMode")
 			        end
 
 			        -- [Feature: Notification Size] Small keeps the original
@@ -7813,18 +7854,45 @@ end)
 			        do
 			            local SizeMap = {Small = 1, Medium = 1.2, Large = 1.3}
 			            local ScaleToName = {[1] = "Small", [1.2] = "Medium", [1.3] = "Large"}
-			            SettingsSection:Dropdown({
+			            GeneralSection:Dropdown({
 			                Name = "Notification Size",
 			                Flag = "NotificationSize",
 			                Items = {"Small", "Medium", "Large"},
 			                Default = ScaleToName[Library.NotificationScale] or "Small",
 			                Callback = function(Value)
 			                    Library.NotificationScale = SizeMap[Value] or 1
+			                    SaveLibrarySettings()
 			                end
 			            })
+			            TableInsert(PersistedFlags, "NotificationSize")
 			        end
-			
-			        SettingsSection:Slider({
+
+			        GeneralSection:Label("UI Keybind"):Keybind({
+			            Name = "Menu keybind",
+			            Flag = "UIKeybind",
+			            Default = Library.MenuKeybind,
+			            Mode = "Toggle",
+			            Callback = function()
+			                Library.MenuKeybind = Library.Flags["UIKeybind"].Key
+			                SaveLibrarySettings()
+			            end
+			        })
+			        TableInsert(PersistedFlags, "UIKeybind")
+			    end
+
+			    -- [Container: Animación] Fade/tween timing, with a Reset button
+			    -- that restores the values the library shipped with. Those
+			    -- defaults are captured here, before this saved-settings load
+			    -- (further below) has had any chance to override them.
+			    local AnimationSection = SettingsSubPage:Section({Name = "Animación", Side = 2}) do
+			        local AnimationDefaults = {
+			            FadeTime       = Library.FadeSpeed,
+			            TweenTime      = Library.Tween.Time,
+			            TweenStyle     = Library.Tween.Style.Name,
+			            TweenDirection = Library.Tween.Direction.Name,
+			        }
+
+			        local FadeSlider = AnimationSection:Slider({
 			            Name = "Fade time",
 			            Flag = "FadeTime",
 			            Default = Library.FadeSpeed,
@@ -7833,10 +7901,12 @@ end)
 			            Decimals = 0.01,
 			            Callback = function(Value)
 			                Library.FadeSpeed = Value
+			                SaveLibrarySettings()
 			            end
 			        })
-			
-			        SettingsSection:Slider({
+			        TableInsert(PersistedFlags, "FadeTime")
+
+			        local TweenTimeSlider = AnimationSection:Slider({
 			            Name = "Tween time",
 			            Flag = "TweenTime",
 			            Default = Library.Tween.Time,
@@ -7845,35 +7915,53 @@ end)
 			            Decimals = 0.01,
 			            Callback = function(Value)
 			                Library.Tween.Time = Value
+			                SaveLibrarySettings()
 			            end
 			        })
-			
-			        SettingsSection:Dropdown({
+			        TableInsert(PersistedFlags, "TweenTime")
+
+			        local TweenStyleDropdown = AnimationSection:Dropdown({
 			            Name = "Tween style",
 			            Flag = "Tween style",
 			            Items = { "Linear", "Quad", "Quart", "Back", "Bounce", "Circular", "Cubic", "Elastic", "Exponential", "Sine", "Quint" },
 			            Default = "Cubic",
 			            Callback = function(Value)
 			                Library.Tween.Style = Enum.EasingStyle[Value]
+			                SaveLibrarySettings()
 			            end
 			        })
-			
-			        SettingsSection:Dropdown({
+			        TableInsert(PersistedFlags, "Tween style")
+
+			        local TweenDirectionDropdown = AnimationSection:Dropdown({
 			            Name = "Tween direction",
 			            Flag = "Tween direction",
 			            Items = { "In", "Out", "InOut" },
 			            Default = "Out",
 			            Callback = function(Value)
 			                Library.Tween.Direction = Enum.EasingDirection[Value]
+			                SaveLibrarySettings()
 			            end
 			        })
-			
-			        SettingsSection:Button():Add("Panic / Emergency Close", function()
+			        TableInsert(PersistedFlags, "Tween direction")
+
+			        AnimationSection:Button():Add("Reset to Default", function()
+			            FadeSlider:Set(AnimationDefaults.FadeTime)
+			            TweenTimeSlider:Set(AnimationDefaults.TweenTime)
+			            TweenStyleDropdown:Set(AnimationDefaults.TweenStyle)
+			            TweenDirectionDropdown:Set(AnimationDefaults.TweenDirection)
+			            SaveLibrarySettings()
+			        end)
+			    end
+
+			    -- [Container: Acciones] Panic/Rejoin/Serverhop, grouped on their
+			    -- own since they're one-shot actions rather than saved settings.
+			    local ActionsSection = SettingsSubPage:Section({Name = "Acciones", Side = 1}) do
+			        ActionsSection:Button():Add("Panic / Emergency Close", function()
 			            Library:Notification("Emergency Close", "Script unloaded and game state restored.", 5)
 			            Library:Unload()
 			        end)
-			        -- Added Rejoin Button
-			        SettingsSection:Button():Add("Rejoin", function()
+
+			        ActionsSection:Button():Add("Rejoin", function()
 			            local TeleportService = game:GetService("TeleportService")
 			            local Players = game:GetService("Players")
 			            local LocalPlayer = Players.LocalPlayer
@@ -7881,9 +7969,8 @@ end)
 			                TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
 			            end
 			        end)
-			
-			        -- Added Serverhop Button
-			        SettingsSection:Button():Add("Serverhop", function()
+
+			        ActionsSection:Button():Add("Serverhop", function()
 			            local TeleportService = game:GetService("TeleportService")
 			            local Players = game:GetService("Players")
 			            local LocalPlayer = Players.LocalPlayer
@@ -7891,16 +7978,16 @@ end)
 			                TeleportService:Teleport(game.PlaceId, LocalPlayer)
 			            end
 			        end)
-			
-			        SettingsSection:Label("UI Keybind"):Keybind({
-			            Name = "Menu keybind",
-			            Flag = "UIKeybind",
-			            Default = Library.MenuKeybind,
-			            Mode = "Toggle",
-			            Callback = function()
-			                Library.MenuKeybind = Library.Flags["UIKeybind"].Key
-			            end
-			        })
+			    end
+
+			    -- [Feature: Settings Persistence] Restore previously-saved values
+			    -- now that every control above has registered its SetFlags entry.
+			    -- Goes through the existing silent LoadConfig path, which applies
+			    -- values via SetFlags without ever firing a notification itself.
+			    if isfile(SettingsSaveFile) then
+			        Library:SafeCall(function()
+			            Library:LoadConfig(readfile(SettingsSaveFile))
+			        end)
 			    end
 			end
 
