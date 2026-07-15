@@ -1719,6 +1719,15 @@ local Library do
                 self:RefreshThemeColorpickers()
             end
             self.HighContrastSnapshot = nil
+
+            -- [Fix: High Contrast persisting after disable] Without this,
+            -- ActiveTheme.json on disk could still hold boosted colours
+            -- saved while HC was on (e.g. from editing Text Stroke), so a
+            -- Custom theme would keep loading boosted on the next launch
+            -- even with the toggle itself correctly saved as off.
+            if self.ActivePreset == "Custom" then
+                self:SaveActiveTheme()
+            end
         end
 
         self:UpdateThemeColorLocks()
@@ -1752,6 +1761,14 @@ local Library do
     -- Pretty-printed (one "Key": "Value" pair per line, sorted alphabetically)
     -- so it's actually readable in the export box instead of one dense line.
     Library.GetThemeConfig = function(self)
+        -- [Feature: High Contrast Mode] While HC is active, Theme holds the
+        -- mathematically-boosted colours. Persisting/exporting those as the
+        -- "real" theme would bake the boost in permanently: turning HC back
+        -- off later would have nothing correct left to restore to, and
+        -- reloading with HC off would still show boosted colours. Source
+        -- from the pre-boost snapshot instead whenever it's available.
+        local Source = (self.HighContrast and self.HighContrastSnapshot) or self.Theme
+
         local Keys = { }
         for Key in self.Theme do
             TableInsert(Keys, Key)
@@ -1760,7 +1777,8 @@ local Library do
 
         local Lines = { "{" }
         for Index, Key in ipairs(Keys) do
-            local HexValue = "#" .. self.Theme[Key]:ToHex()
+            local Color = Source[Key] or self.Theme[Key]
+            local HexValue = "#" .. Color:ToHex()
             local Comma = Index < #Keys and "," or ""
             TableInsert(Lines, string.format('    "%s": "%s"%s', Key, HexValue, Comma))
         end
