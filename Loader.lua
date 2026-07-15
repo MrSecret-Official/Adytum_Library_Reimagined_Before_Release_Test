@@ -389,6 +389,9 @@ local Library do
     -- [Feature: High Contrast Mode] Restored further below, once
     -- SetHighContrast is defined (this file only records on/off).
     Library.HighContrastFile = Library.Folders.Directory .. "/HighContrast.txt"
+    -- [Feature: Advanced Theming] Persists the "Advanced Mode" toggle so it
+    -- survives across sessions like High Contrast Mode does.
+    Library.AdvancedThemingFile = Library.Folders.Directory .. "/AdvancedTheming.txt"
 
     Library.SaveActivePreset = function(self, Name)
         pcall(writefile, self.ActivePresetFile, Name)
@@ -1714,14 +1717,8 @@ local Library do
         end
     end
 
-    -- [Feature: High Contrast Mode] Restore on/off state saved from a
-    -- previous session (the toggle above writes this file on change).
-    if isfile(Library.HighContrastFile) then
-        local Ok, Saved = pcall(readfile, Library.HighContrastFile)
-        if Ok and Saved == "true" then
-            Library:SetHighContrast(true)
-        end
-    end
+    -- [Feature: High Contrast Mode] Restored further below, once
+    -- RefreshThemeColorpickers is also defined (SetHighContrast calls it).
 
     -- [Feature: Config Export] Serialise current theme colours to JSON.
     -- Pretty-printed (one "Key": "Value" pair per line, sorted alphabetically)
@@ -1792,6 +1789,18 @@ local Library do
             end
         end
         self._SuppressThemeCallbacks = false
+    end
+
+    -- [Feature: High Contrast Mode] Restore on/off state saved from a
+    -- previous session (the toggle in Theming writes this file on change).
+    -- Done here, now that both SetHighContrast and RefreshThemeColorpickers
+    -- exist, and before the window/colorpicker UI is built so the Colors
+    -- section picks up the boosted colours as its defaults.
+    if isfile(Library.HighContrastFile) then
+        local Ok, Saved = pcall(readfile, Library.HighContrastFile)
+        if Ok and Saved == "true" then
+            Library:SetHighContrast(true)
+        end
     end
 
     -- [Feature: Folder Structure] Build per-hub per-game folder tree
@@ -7567,6 +7576,15 @@ end)
                     end
                 end
 
+                -- [Feature: Advanced Theming] Persisted toggle state, read
+                -- once here so both the toggle's Default and the final
+                -- visibility application (once sections exist) agree.
+                local SavedAdvancedTheming = false
+                if Library.AllowAdvancedTheming and isfile(Library.AdvancedThemingFile) then
+                    local Ok, Saved = pcall(readfile, Library.AdvancedThemingFile)
+                    SavedAdvancedTheming = Ok and Saved == "true"
+                end
+
                 -- Upvalue so colorpicker callbacks can flip the dropdown to "Custom".
                 local PresetDropdown
 
@@ -7585,9 +7603,10 @@ end)
                         ThemesSection:Toggle({
                             Name = "Advanced Mode",
                             Flag = "AdvancedTheming",
-                            Default = false,
+                            Default = SavedAdvancedTheming,
                             Callback = function(Value)
                                 SetAdvancedThemingVisible(Value)
+                                pcall(writefile, Library.AdvancedThemingFile, tostring(Value))
                             end
                         })
                     end
@@ -7880,8 +7899,9 @@ end)
                     end
                     TableInsert(AdvancedThemingSections, ExportImportThemeSection)
 
-                    -- Hidden until user flips Advanced Mode on.
-                    SetAdvancedThemingVisible(false)
+                    -- Restore whatever the user had last time, now that all
+                    -- advanced sections have been built and registered.
+                    SetAdvancedThemingVisible(SavedAdvancedTheming)
                 end
 
             end
@@ -8248,6 +8268,29 @@ end)
 			            local LocalPlayer = Players.LocalPlayer
 			            if LocalPlayer then
 			                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+			            end
+			        end)
+
+			        GeneralSection:Button():Add("Copy PlaceID", function()
+			            if setclipboard then
+			                pcall(setclipboard, tostring(game.PlaceId))
+			                Library:Notification("Success", "PlaceID copied to clipboard", 3)
+			            else
+			                Library:Notification("Error", "Your executor doesn't support setclipboard", 3)
+			            end
+			        end)
+
+			        GeneralSection:Button():Add("Open Roblox Dev Console", function()
+			            -- Simulates the F9 keypress that normally opens it,
+			            -- since there's no direct public API for this.
+			            local VIM = game:GetService("VirtualInputManager")
+			            local Ok = pcall(function()
+			                VIM:SendKeyEvent(true, Enum.KeyCode.F9, false, game)
+			                task.wait()
+			                VIM:SendKeyEvent(false, Enum.KeyCode.F9, false, game)
+			            end)
+			            if not Ok then
+			                Library:Notification("Error", "Your executor doesn't support simulating the F9 keypress. Try pressing F9 manually.", 5)
 			            end
 			        end)
 			    end
