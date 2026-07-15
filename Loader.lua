@@ -119,6 +119,11 @@ local Library do
 
         Colorpickers = { },
 
+        -- [Feature: High Contrast Mode] ColorName -> Label component, so the
+        -- text can be greyed out (in addition to the colorpicker itself
+        -- being locked) whenever that key is locked by High Contrast Mode.
+        ThemeColorLabels = { },
+
         -- [Feature: Advanced Theming] Set to true while batch-updating
         -- colorpicker UIs (RefreshThemeColorpickers) so the individual picker
         -- callbacks don't re-flip ActivePreset to "Custom" or retrigger
@@ -1715,6 +1720,29 @@ local Library do
             end
             self.HighContrastSnapshot = nil
         end
+
+        self:UpdateThemeColorLocks()
+    end
+
+    -- [Feature: High Contrast Mode] Greys out (or restores) every Colors-
+    -- section label + colorpicker to match the current lock state, without
+    -- needing to rebuild the Theming page. Safe to call even before the
+    -- Colors section exists yet (ThemeColorLabels/Colorpickers are empty).
+    Library.UpdateThemeColorLocks = function(self)
+        for _, Picker in self.Colorpickers do
+            local Flag = Picker.Flag
+            if type(Flag) == "string" and Flag:match("Theme$") then
+                local ColorName = Flag:gsub("Theme$", "")
+                local Locked = self.HighContrast and self.HighContrastLockedKeys[ColorName]
+
+                Picker:SetEnabled(not Locked)
+
+                local ThisLabel = Picker.Label or self.ThemeColorLabels[ColorName]
+                if ThisLabel then
+                    ThisLabel:SetEnabled(not Locked)
+                end
+            end
+        end
     end
 
     -- [Feature: High Contrast Mode] Restored further below, once
@@ -3178,6 +3206,17 @@ local Library do
 
             function Label:SetVisibility(Bool)
                 Items["Label"].Instance.Visible = Bool
+            end
+
+            Label.Enabled = true
+
+            -- [Feature: High Contrast Mode] Dims the label's text colour
+            -- (same "Placeholder Text" treatment used elsewhere for
+            -- disabled controls) when the key it names is locked.
+            function Label:SetEnabled(Bool)
+                Label.Enabled = Bool
+                Items["Text"]:ChangeItemTheme({TextColor3 = Bool and "Text" or "Placeholder Text"})
+                Items["Text"].Instance.TextColor3 = Bool and Library.Theme.Text or Library.Theme["Placeholder Text"]
             end
 
             return Label, Items 
@@ -4662,6 +4701,25 @@ local Library do
                 end
             end
 
+            Colorpicker.Enabled = true
+
+            -- [Feature: High Contrast Mode] Greys the swatch out (lower
+            -- transparency + a muted overlay tint) and actually blocks the
+            -- picker from being opened or changed while disabled, not just
+            -- a visual cue.
+            function Colorpicker:SetEnabled(Bool)
+                Colorpicker.Enabled = Bool
+                if Bool and Colorpicker.IsOpen then
+                    -- no-op, stays open; only forcibly close when disabling
+                elseif (not Bool) and Colorpicker.IsOpen then
+                    Colorpicker:SetOpen(false)
+                end
+                Items["ColorpickerButton"].Instance.ImageTransparency = nil
+                Items["ColorpickerButton"]:ChangeItemTheme({BorderColor3 = Bool and "Border" or "Placeholder Text"})
+                Items["ColorpickerButton"].Instance.BackgroundTransparency = Bool and 0 or 0.55
+                Items["ColorpickerButtonInline"].Instance.BackgroundTransparency = Bool and 0 or 0.55
+            end
+
             function Colorpicker:Set(Color, Alpha)
                 if type(Color) == "table" then
                     Color = FromRGB(Color[1], Color[2], Color[3])
@@ -4687,6 +4745,9 @@ local Library do
             end
 
             Items["ColorpickerButton"]:Connect("MouseButton1Down", function()
+                if Colorpicker.Enabled == false then
+                    return
+                end
                 Colorpicker:SetOpen(not Colorpicker.IsOpen)
             end)
 
@@ -7668,8 +7729,15 @@ end)
                 -- directly below ThemesSection. Always visible (not advanced-gated).
                 -- Each callback flips the preset dropdown to "Custom" in real time.
                 local ColorsSection = ThemingSubPage:Section({Name = "Colors", Side = 1}) do
+                    -- Suppress the whole construction loop: each Colorpicker
+                    -- fires its callback once on creation (via Set(Default)),
+                    -- and without this that initial fire would flip
+                    -- ActivePreset to "Custom" and spam locked-key warnings
+                    -- on every single load, regardless of HighContrast.
+                    Library._SuppressThemeCallbacks = true
                     for Index, Value in Library.Theme do
-                        ColorsSection:Label(Index):Colorpicker({
+                        local ThisLabel = ColorsSection:Label(Index)
+                        local ThisColorpicker = ThisLabel:Colorpicker({
                             Name = Index,
                             Flag = Index .. "Theme",
                             Default = Value,
@@ -7681,16 +7749,27 @@ end)
                                 -- [Feature: High Contrast Mode] Key colour
                                 -- roles are mathematically derived for
                                 -- contrast; block manual edits to them while
-                                -- HC is on and snap the picker back to the
-                                -- actual (locked) applied colour.
+                                -- HC is on and silently snap the picker back
+                                -- to the actual (locked) applied colour. No
+                                -- notification: the swatch is already greyed
+                                -- out and click-blocked, so this is only
+                                -- reachable via programmatic/edge paths.
                                 if Library.HighContrast and Library.HighContrastLockedKeys[Index] then
-                                    Library:Notification("Warning", Index .. " is locked while High Contrast Mode is enabled.", 3)
                                     Library:RefreshThemeColorpickers()
                                     return
                                 end
 
                                 Library.Theme[Index] = Value
                                 Library:ChangeTheme(Index, Value)
+
+                                -- [Feature: High Contrast Mode] This key
+                                -- (Text Stroke) stays editable while HC is
+                                -- active. Mirror the edit into the snapshot
+                                -- too, so turning HC back off restores this
+                                -- change instead of the pre-HC value.
+                                if Library.HighContrast and Library.HighContrastSnapshot then
+                                    Library.HighContrastSnapshot[Index] = Value
+                                end
 
                                 Library.ActivePreset = "Custom"
                                 if PresetDropdown then
@@ -7700,7 +7779,18 @@ end)
                                 Library:SaveActiveTheme()
                             end
                         })
+
+                        Library.ThemeColorLabels[Index] = ThisLabel
+                        ThisColorpicker.Label = ThisLabel
+
+                        -- Apply the correct locked/unlocked visual state
+                        -- immediately, matching whatever HighContrast is
+                        -- restored to by this point in startup.
+                        local Locked = Library.HighContrast and Library.HighContrastLockedKeys[Index]
+                        ThisLabel:SetEnabled(not Locked)
+                        ThisColorpicker:SetEnabled(not Locked)
                     end
+                    Library._SuppressThemeCallbacks = false
                 end
 
                 -- ── RIGHT COLUMN (advanced only) ───────────────────────────
