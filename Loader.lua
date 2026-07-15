@@ -6399,6 +6399,16 @@ end)
             })  Items["Liner"]:AddToTheme({BackgroundColor3 = "Accent"})
         end
 
+        -- [Fix: Notification Text Overflow] AbsoluteSize doesn't update
+        -- synchronously after creating the instance/setting Text -- Roblox's
+        -- layout engine (driving AutomaticSize) only settles on the next
+        -- render step. Reading it immediately could capture a stale, too-
+        -- narrow width, which then got locked in below (AutomaticSize.Y),
+        -- letting the Title/Description labels (still AutomaticSize.XY)
+        -- overflow past the frame's border. Waiting a heartbeat first
+        -- ensures Size reflects the real, fully-laid-out content width.
+        RunService.Heartbeat:Wait()
+
         local Size = Items["Notification"].Instance.AbsoluteSize
 
         for Index, Value in Items do 
