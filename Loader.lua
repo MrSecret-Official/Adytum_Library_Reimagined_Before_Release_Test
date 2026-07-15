@@ -1807,6 +1807,18 @@ local Library do
                 end
             end
         end
+        -- [Fix: High Contrast reverting to the wrong theme] Without this,
+        -- loading any theme (manually, or an [AT] autoload theme at
+        -- startup) while HC is active would leave the OLD
+        -- HighContrastSnapshot in place, pointing at whatever theme was
+        -- active before this load. Turning HC off afterwards would then
+        -- restore that stale previous theme instead of the one that was
+        -- just loaded. Re-running SetHighContrast(true) takes a fresh
+        -- snapshot of the colours just applied above and re-derives the
+        -- boosted view from them, exactly like SetThemePreset already does.
+        if self.HighContrast then
+            self:SetHighContrast(true)
+        end
         -- Refresh colorpicker UIs so they show the newly loaded colours
         self:RefreshThemeColorpickers()
         if AutoSave then
