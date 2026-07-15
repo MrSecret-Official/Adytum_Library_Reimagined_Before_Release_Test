@@ -255,18 +255,18 @@ local Library do
 
     local Themes = {
 		["Preset"] = {
-			["Background"] = FromRGB(6, 12, 20),            -- Fondo principal: azul marino casi negro
-			["Border"] = FromRGB(16, 28, 44),                -- Borde sutil azulado
-			["Inline"] = FromRGB(12, 22, 36),                -- Separaciones entre elementos
-			["Hovered Element"] = FromRGB(28, 58, 96),       -- Hover: azul océano vivo
-			["Page Background"] = FromRGB(9, 17, 27),        -- Fondo de subpáginas
-			["Outline"] = FromRGB(42, 78, 122),              -- Contorno acristalado
-			["Element"] = FromRGB(14, 26, 42),               -- Bloques de interfaz
-			["Gradient"] = FromRGB(22, 74, 130),             -- Degradado mar oscuro -> azul claro
-			["Text"] = FromRGB(222, 236, 248),               -- Texto claro, casi blanco azulado
+			["Background"] = FromRGB(6, 12, 20),            -- Main background: almost-black navy blue
+			["Border"] = FromRGB(16, 28, 44),                -- Subtle bluish border
+			["Inline"] = FromRGB(12, 22, 36),                -- Separators between elements
+			["Hovered Element"] = FromRGB(28, 58, 96),       -- Hover: vivid ocean blue
+			["Page Background"] = FromRGB(9, 17, 27),        -- Sub-page background
+			["Outline"] = FromRGB(42, 78, 122),              -- Glassy outline
+			["Element"] = FromRGB(14, 26, 42),               -- UI element blocks
+			["Gradient"] = FromRGB(22, 74, 130),             -- Dark sea -> light blue gradient
+			["Text"] = FromRGB(222, 236, 248),               -- Light, near-white-blue text
 			["Text Stroke"] = FromRGB(0, 0, 0),
 			["Placeholder Text"] = FromRGB(138, 160, 184),
-			["Accent"] = FromRGB(58, 138, 224)               -- 🌊 Azul marino brillante (acento)
+			["Accent"] = FromRGB(58, 138, 224)               -- 🌊 Bright navy blue (accent)
 		},
 		-- [Feature: Theme Presets] Built-in: Midnight (deep violet)
 		["Midnight"] = {
@@ -7880,11 +7880,11 @@ end)
 			        TableInsert(PersistedFlags, "UIKeybind")
 			    end
 
-			    -- [Container: Animación] Fade/tween timing, with a Reset button
+			    -- [Container: Animation] Fade/tween timing, with a Reset button
 			    -- that restores the values the library shipped with. Those
 			    -- defaults are captured here, before this saved-settings load
 			    -- (further below) has had any chance to override them.
-			    local AnimationSection = SettingsSubPage:Section({Name = "Animación", Side = 2}) do
+			    local AnimationSection = SettingsSubPage:Section({Name = "Animation", Side = 2}) do
 			        local AnimationDefaults = {
 			            FadeTime       = Library.FadeSpeed,
 			            TweenTime      = Library.Tween.Time,
@@ -7953,9 +7953,9 @@ end)
 			        end)
 			    end
 
-			    -- [Container: Acciones] Panic/Rejoin/Serverhop, grouped on their
+			    -- [Container: Actions] Panic/Rejoin/Serverhop, grouped on their
 			    -- own since they're one-shot actions rather than saved settings.
-			    local ActionsSection = SettingsSubPage:Section({Name = "Acciones", Side = 1}) do
+			    local ActionsSection = SettingsSubPage:Section({Name = "Actions", Side = 1}) do
 			        ActionsSection:Button():Add("Panic / Emergency Close", function()
 			            Library:Notification("Emergency Close", "Script unloaded and game state restored.", 5)
 			            Library:Unload()
