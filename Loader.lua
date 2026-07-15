@@ -1087,6 +1087,9 @@ local Library do
     -- excluded here or Export/Import Config ends up dumping (and
     -- overwriting) the theme instead of the actual saved selections.
     Library.IsThemeFlag = function(self, Index)
+        if Index == "HighContrastTheme" then
+            return true
+        end
         return type(Index) == "string" and StringFind(Index, "Theme") ~= nil
     end
 
@@ -7733,7 +7736,19 @@ end)
                     -- against manual editing while it's active.
                     ThemesSection:Toggle({
                         Name = "High Contrast Mode",
-                        Flag = "HighContrast",
+                        -- [Fix: HC re-enabling itself] This MUST contain
+                        -- "Theme" so Library.IsThemeFlag excludes it from
+                        -- the generic Config system (GetConfig/LoadConfig/
+                        -- SetFlags). High Contrast already has its own
+                        -- dedicated persistence (HighContrastFile) restored
+                        -- above; if this flag were also swept into a saved
+                        -- Config, autoloading that Config later in startup
+                        -- would call SetFlags["HighContrast"] with whatever
+                        -- stale value was saved in it, silently re-enabling
+                        -- (or re-disabling) HC AND rewriting HighContrastFile
+                        -- to match — undoing anything the user did since,
+                        -- no matter how many times they toggled it off.
+                        Flag = "HighContrastTheme",
                         Default = Library.HighContrast or false,
                         Callback = function(Value)
                             Library:SetHighContrast(Value)
