@@ -6450,8 +6450,6 @@ end)
         RunService.RenderStepped:Wait()
         RunService.RenderStepped:Wait()
 
-        local Size = Items["Notification"].Instance.AbsoluteSize
-
         for Index, Value in Items do 
             if Value.Instance:IsA("Frame") then
                 Value.Instance.BackgroundTransparency = 1
@@ -6462,7 +6460,18 @@ end)
             end
         end 
 
-        Items["Notification"].Instance.AutomaticSize = Enum.AutomaticSize.Y
+        -- [Fix: Notification Font Size Clipping] This used to switch
+        -- AutomaticSize to Y-only right here, permanently locking the
+        -- frame's width at whatever it happened to be at creation. But
+        -- Title/Description stay registered in Library.FontItems for their
+        -- whole lifetime, so adjusting the Font Size (or Notification Size)
+        -- slider *while a notification is on screen* keeps growing their
+        -- TextSize live -- with X-autosizing disabled, that growing text
+        -- had nowhere to go but past the frame's edge, and
+        -- ClipsDescendants sliced it off. Leaving AutomaticSize on XY for
+        -- the whole visible lifetime keeps the box reactive to those live
+        -- rescales; we only drop to a fixed Size right before the closing
+        -- tween below, which needs to animate Size manually.
 
         Library:Thread(function()
             for Index, Value in Items do 
@@ -6477,7 +6486,15 @@ end)
                 end
             end
 
-            Items["Notification"]:Tween(nil, {Size = UDim2New(0, Size.X, 0, 0)})
+            -- Freeze the frame at its current (possibly live-rescaled)
+            -- size only now, right as the closing animation takes over --
+            -- AutomaticSize and a manual Size tween can't drive the same
+            -- axis at once, so this is the latest point we can capture it.
+            local ClosingSize = Items["Notification"].Instance.AbsoluteSize
+            Items["Notification"].Instance.Size = UDim2New(0, ClosingSize.X, 0, ClosingSize.Y)
+            Items["Notification"].Instance.AutomaticSize = Enum.AutomaticSize.None
+
+            Items["Notification"]:Tween(nil, {Size = UDim2New(0, ClosingSize.X, 0, 0)})
             Items["Liner"]:Tween(TweenInfo.new(Duration, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New(0, 0, 0, 1)})
             
             task.delay(Duration + 0.1, function()
