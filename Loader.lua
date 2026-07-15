@@ -1207,6 +1207,22 @@ local Library do
         end
     end
 
+    -- [Fix: Autoload Spoofing] Strips any user-typed "[AT] " prefix (plus
+    -- stray leading whitespace) from a config/theme name before it's ever
+    -- written to disk. The "[AT] " tag must only ever be applied by
+    -- Library:SetAutoload -- never by someone typing it into the name/import
+    -- textbox -- otherwise a user could self-autoload an arbitrary config
+    -- without going through the "Set as Autoload" button.
+    Library.SanitizeAutoloadName = function(self, Name)
+        Name = tostring(Name or "")
+        while true do
+            local Stripped = Name:gsub("^%s*%[AT%]%s*", "")
+            if Stripped == Name then break end
+            Name = Stripped
+        end
+        return Name
+    end
+
     -- [Feature: Single Autoload] Marks Target as the "[AT] " autoload file
     -- inside Folder, stripping the "[AT] " prefix off every other file in
     -- that same folder first so there is never more than one autoload
@@ -8053,6 +8069,11 @@ end)
 
                         CreateAndDeleteButton:Add("Create", function()
                             if ThemeName and ThemeName ~= "" then
+                                ThemeName = Library:SanitizeAutoloadName(ThemeName)
+                                if ThemeName == "" then
+                                    Library:Notification("Error", "Please enter a valid theme name", 5)
+                                    return
+                                end
                                 if not isfile(Library.Folders.Themes .. "/" .. ThemeName .. ".json") then
                                     writefile(Library.Folders.Themes .. "/" .. ThemeName .. ".json", Library:GetThemeConfig())
                                     Library:Notification("Success", "Created theme " .. ThemeName .. " succesfully", 5)
@@ -8196,6 +8217,12 @@ end)
                                 return
                             end
 
+                            ImportThemeName = Library:SanitizeAutoloadName(ImportThemeName)
+                            if ImportThemeName == "" then
+                                Library:Notification("Error", "Please enter a valid name for the imported theme", 5)
+                                return
+                            end
+
                             local FileName = ImportThemeName .. ".json"
 
                             if isfile(Library.Folders.Themes .. "/" .. FileName) then
@@ -8258,6 +8285,11 @@ end)
 
                     CreateAndDeleteButton:Add("Create", function()
                         if ConfigName and ConfigName ~= "" then
+                            ConfigName = Library:SanitizeAutoloadName(ConfigName)
+                            if ConfigName == "" then
+                                Library:Notification("Error", "Please enter a valid config name", 5)
+                                return
+                            end
                             if not isfile(Library.Folders.Configs .. "/" .. ConfigName .. ".json") then
                                 writefile(Library.Folders.Configs .. "/" .. ConfigName .. ".json", Library:GetConfig())
                                 Library:Notification("Success", "Created config "..ConfigName .. " succesfully", 5)
@@ -8417,6 +8449,12 @@ end)
                             local DecodeOk = pcall(HttpService.JSONDecode, HttpService, Text)
                             if not DecodeOk then
                                 Library:Notification("Error", "Import failed: pasted text isn't valid JSON", 5)
+                                return
+                            end
+
+                            ImportConfigName = Library:SanitizeAutoloadName(ImportConfigName)
+                            if ImportConfigName == "" then
+                                Library:Notification("Error", "Please enter a valid name for the imported config", 5)
                                 return
                             end
 
