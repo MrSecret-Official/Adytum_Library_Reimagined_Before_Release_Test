@@ -61,6 +61,15 @@ local Library do
     local IsMobile = UserInputService.TouchEnabled or false
 
     Library = {
+        -- [Feature: Branding] Adytum Moon Library [Moon] — Reimagined collection.
+        -- "Moon" line focuses on a smoother, controlled-but-premium (Apple-like)
+        -- experience: three curated base themes (Star / Lunar Dust / Black Hole),
+        -- an optional pack of simple colour Mods, and an optional Mods+ layer
+        -- that lets users import/export community themes.
+        LibraryName      = "Adytum Moon Library",
+        LibraryShortName = "Moon",
+        LibraryTagline   = "Part of the Adytum Reimagined collection",
+
         Theme =  { },
 
         MenuKeybind = tostring(Enum.KeyCode.RightControl), 
@@ -130,10 +139,34 @@ local Library do
         -- SaveActiveTheme while a preset switch is already in progress.
         _SuppressThemeCallbacks = false,
 
-        -- [Feature: Theme Presets] Registry of colour presets
+        -- [Feature: Theme Presets] Registry of colour presets (Base + Mods + Mods+)
         ThemePresets = { },
-        ActivePreset  = "Default",
-        AllowThemePresets = true,   -- dev sets false to hide preset picker from users
+        -- [Feature: Theme Tiers] Name -> "Base" | "Mods" | "Mods+", used to group
+        -- the Preset dropdown and to gate visibility per-tier below.
+        ThemeTiers = { },
+        ActivePreset  = "Black Hole",
+        AllowThemePresets = true,   -- dev sets false to hide the whole preset picker from users
+
+        -- [Feature: Theme Tiers] "Star" (light, Apple-style white/light grey),
+        -- "Lunar Dust" (grey with white tones) and "Black Hole" (dark with
+        -- white tones) are the three curated Base experiences. At least one
+        -- MUST stay enabled -- enforced right after this table is built, so a
+        -- dev can never accidentally ship a library with zero usable themes.
+        EnabledBaseThemes = {
+            ["Star"]       = true,
+            ["Lunar Dust"] = true,
+            ["Black Hole"] = true,
+        },
+
+        -- [Feature: Mods] Simple single-colour preset pack (Orange, Red,
+        -- Yellow, Green, Purple, etc.) devs can enable/disable as a block.
+        AllowMods = true,
+
+        -- [Feature: Mods+] Community/Default theme layer: import/export any
+        -- theme as JSON (built on the existing Advanced Theming + Config
+        -- Export system) plus a couple of louder "for fun" default presets
+        -- (e.g. Clown Party). Devs can enable/disable as a block.
+        AllowModsPlus = true,
 
         -- [Feature: High Contrast Mode] When true, colours are mathematically
         -- boosted for contrast (see ComputeHighContrastTheme/SetHighContrast)
@@ -144,10 +177,11 @@ local Library do
         -- [Feature: Config Export] Toggle export/import buttons in settings
         AllowConfigExport = true,   -- dev sets false to disable
 
-        -- [Feature: Advanced Theming] Toggle the "Advanced Mode" switch in
-        -- Theming that reveals theme export/import + a saved-themes list
-        -- (mirrors the Configs subpage). Dev sets false to hide the switch
-        -- and this whole feature from users entirely.
+        -- [Feature: Advanced Theming / Mods+] Toggle the "Advanced Mode"
+        -- switch in Theming that reveals theme export/import + a saved-themes
+        -- list (mirrors the Configs subpage). This is the Mods+ tier: kept as
+        -- its own flag for backwards compatibility, but always mirrors
+        -- AllowModsPlus below (set AllowModsPlus instead going forward).
         AllowAdvancedTheming = true,   -- dev sets false to disable
 
         -- [Feature: Unknown Mode] Lets the user hide the player profile box
@@ -191,16 +225,17 @@ local Library do
         ReduceMotion = false,
         ReduceMotionSnapshot = nil,
 
-        -- [Feature: Corner Radius] Per-type corner radius values and registry
+        -- [Feature: Corner Radius] Per-type corner radius values and registry.
+        -- Softer, rounder defaults for the Moon redesign's premium/Apple feel.
         CornerRadius = {
-            Window  = 6,
-            Boxes   = 3,
-            Sliders = 0,
+            Window  = 14,
+            Boxes   = 8,
+            Sliders = 6,
         },
         CornerRadiusDefaults = {
-            Window  = 6,
-            Boxes   = 3,
-            Sliders = 0,
+            Window  = 14,
+            Boxes   = 8,
+            Sliders = 6,
         },
         CornerItems = {
             Window  = { },
@@ -295,20 +330,68 @@ local Library do
     }
 
     local Themes = {
-		["Preset"] = {
-			["Background"] = FromRGB(6, 12, 20),            -- Main background: almost-black navy blue
-			["Border"] = FromRGB(16, 28, 44),                -- Subtle bluish border
-			["Inline"] = FromRGB(12, 22, 36),                -- Separators between elements
-			["Hovered Element"] = FromRGB(28, 58, 96),       -- Hover: vivid ocean blue
-			["Page Background"] = FromRGB(9, 17, 27),        -- Sub-page background
-			["Outline"] = FromRGB(42, 78, 122),              -- Glassy outline
-			["Element"] = FromRGB(14, 26, 42),               -- UI element blocks
-			["Gradient"] = FromRGB(22, 74, 130),             -- Dark sea -> light blue gradient
-			["Text"] = FromRGB(222, 236, 248),               -- Light, near-white-blue text
-			["Text Stroke"] = FromRGB(0, 0, 0),
-			["Placeholder Text"] = FromRGB(138, 160, 184),
-			["Accent"] = FromRGB(58, 138, 224)               -- 🌊 Bright navy blue (accent)
-		},
+        -- ════════════════════════════════════════════════════════════════
+        -- BASE TIER — "Star" / "Lunar Dust" / "Black Hole"
+        -- The three curated Moon experiences. Controlled, restrained accent
+        -- use, and a shared near-black/near-white "Accent" so every control
+        -- reads as one coherent, premium system rather than a rainbow of
+        -- one-off presets.
+        -- ════════════════════════════════════════════════════════════════
+
+        -- [Base] "Star experience" — white / light grey, Apple-light styled.
+        ["Star"] = {
+            ["Background"]       = FromRGB(246, 246, 248),
+            ["Border"]           = FromRGB(226, 226, 230),
+            ["Inline"]           = FromRGB(236, 236, 239),
+            ["Hovered Element"]  = FromRGB(224, 224, 230),
+            ["Page Background"]  = FromRGB(255, 255, 255),
+            ["Outline"]          = FromRGB(210, 210, 216),
+            ["Element"]          = FromRGB(255, 255, 255),
+            ["Gradient"]         = FromRGB(235, 235, 240),
+            ["Text"]             = FromRGB(24, 24, 27),
+            ["Text Stroke"]      = FromRGB(255, 255, 255),
+            ["Placeholder Text"] = FromRGB(140, 140, 148),
+            ["Accent"]           = FromRGB(10, 10, 12)
+        },
+
+        -- [Base] "Lunar Dust experience" — grey with white tones.
+        ["Lunar Dust"] = {
+            ["Background"]       = FromRGB(46, 47, 51),
+            ["Border"]           = FromRGB(62, 63, 68),
+            ["Inline"]           = FromRGB(54, 55, 60),
+            ["Hovered Element"]  = FromRGB(72, 73, 79),
+            ["Page Background"]  = FromRGB(40, 41, 45),
+            ["Outline"]          = FromRGB(90, 91, 98),
+            ["Element"]          = FromRGB(58, 59, 64),
+            ["Gradient"]         = FromRGB(100, 101, 108),
+            ["Text"]             = FromRGB(244, 244, 246),
+            ["Text Stroke"]      = FromRGB(0, 0, 0),
+            ["Placeholder Text"] = FromRGB(170, 170, 176),
+            ["Accent"]           = FromRGB(232, 232, 236)
+        },
+
+        -- [Base] "Black Hole experience" — dark with white tones (default).
+        ["Black Hole"] = {
+            ["Background"]       = FromRGB(14, 14, 16),
+            ["Border"]           = FromRGB(30, 30, 34),
+            ["Inline"]           = FromRGB(22, 22, 25),
+            ["Hovered Element"]  = FromRGB(40, 40, 45),
+            ["Page Background"]  = FromRGB(10, 10, 12),
+            ["Outline"]          = FromRGB(55, 55, 60),
+            ["Element"]          = FromRGB(26, 26, 29),
+            ["Gradient"]         = FromRGB(70, 70, 76),
+            ["Text"]             = FromRGB(240, 240, 242),
+            ["Text Stroke"]      = FromRGB(0, 0, 0),
+            ["Placeholder Text"] = FromRGB(150, 150, 156),
+            ["Accent"]           = FromRGB(255, 255, 255)
+        },
+
+        -- ════════════════════════════════════════════════════════════════
+        -- MODS TIER — simple single-colour preset pack, dev-toggleable.
+        -- (Previously the library's built-in preset set; kept identical so
+        -- anyone already using them keeps the same look, just re-homed.)
+        -- ════════════════════════════════════════════════════════════════
+
 		-- [Feature: Theme Presets] Built-in: Midnight (deep violet)
 		["Midnight"] = {
 			["Background"]      = FromRGB(8, 6, 18),
@@ -420,21 +503,83 @@ local Library do
 			["Placeholder Text"]= FromRGB(150, 170, 165),
 			["Accent"]          = FromRGB(0, 190, 160)
 		},
+
+        -- ════════════════════════════════════════════════════════════════
+        -- MODS+ TIER — community/default themes. Users can import/export
+        -- their own via the existing Advanced Theming panel; this is just
+        -- the "louder, for fun" default preset that ships with the tier.
+        -- ════════════════════════════════════════════════════════════════
+
+        -- [Feature: Mods+] "Clown Party" — deliberately loud/playful, meant
+        -- to showcase that Mods+ has no restraint requirement like Base does.
+        ["Clown Party"] = {
+            ["Background"]       = FromRGB(20, 6, 22),
+            ["Border"]           = FromRGB(255, 0, 128),
+            ["Inline"]           = FromRGB(40, 12, 44),
+            ["Hovered Element"]  = FromRGB(255, 90, 0),
+            ["Page Background"]  = FromRGB(15, 4, 18),
+            ["Outline"]          = FromRGB(255, 221, 0),
+            ["Element"]          = FromRGB(48, 14, 52),
+            ["Gradient"]         = FromRGB(0, 225, 255),
+            ["Text"]             = FromRGB(255, 255, 255),
+            ["Text Stroke"]      = FromRGB(0, 0, 0),
+            ["Placeholder Text"] = FromRGB(230, 190, 240),
+            ["Accent"]           = FromRGB(255, 0, 170)
+        },
     }
 
-    Library.Theme = TableClone(Themes["Preset"])
+    -- Default active theme: the "Black Hole" Base experience.
+    Library.Theme = TableClone(Themes["Black Hole"])
 
-    -- Register all built-in presets ("Preset" key is exposed as "Default" to users)
-    Library.ThemePresets["Default"]  = TableClone(Themes["Preset"])
+    -- ── Register every theme + its tier ──────────────────────────────────
+    -- Base tier (always registered; individual entries are filtered out of
+    -- the dropdown further down according to EnabledBaseThemes).
+    Library.ThemePresets["Star"]       = TableClone(Themes["Star"])
+    Library.ThemeTiers["Star"]         = "Base"
+    Library.ThemePresets["Lunar Dust"] = TableClone(Themes["Lunar Dust"])
+    Library.ThemeTiers["Lunar Dust"]   = "Base"
+    Library.ThemePresets["Black Hole"] = TableClone(Themes["Black Hole"])
+    Library.ThemeTiers["Black Hole"]   = "Base"
+
+    -- [Feature: Mods] Simple colour-preset pack (dev-gated by AllowMods)
     Library.ThemePresets["Midnight"] = TableClone(Themes["Midnight"])
+    Library.ThemeTiers["Midnight"]   = "Mods"
     Library.ThemePresets["Ember"]    = TableClone(Themes["Ember"])
+    Library.ThemeTiers["Ember"]      = "Mods"
     Library.ThemePresets["Ruby"]     = TableClone(Themes["Ruby"])
+    Library.ThemeTiers["Ruby"]       = "Mods"
     Library.ThemePresets["Emerald"]  = TableClone(Themes["Emerald"])
+    Library.ThemeTiers["Emerald"]    = "Mods"
     Library.ThemePresets["Sunset"]   = TableClone(Themes["Sunset"])
+    Library.ThemeTiers["Sunset"]     = "Mods"
     -- [Feature: Colorblind Presets] Indicative display names so users can
     -- tell at a glance which kind of colorblindness each one is safe for
     Library.ThemePresets["Colorblind (Red-Green Safe)"]  = TableClone(Themes["ColorblindRG"])
+    Library.ThemeTiers["Colorblind (Red-Green Safe)"]    = "Mods"
     Library.ThemePresets["Colorblind (Blue-Yellow Safe)"] = TableClone(Themes["ColorblindBY"])
+    Library.ThemeTiers["Colorblind (Blue-Yellow Safe)"]  = "Mods"
+
+    -- [Feature: Mods+] Default community preset (dev-gated by AllowModsPlus)
+    Library.ThemePresets["Clown Party"] = TableClone(Themes["Clown Party"])
+    Library.ThemeTiers["Clown Party"]   = "Mods+"
+
+    -- [Feature: Base Themes] At least one Base experience MUST stay enabled
+    -- -- silently re-enable "Black Hole" rather than shipping a library with
+    -- zero usable themes if a dev misconfigures EnabledBaseThemes.
+    do
+        local AnyBaseEnabled = false
+        for _, Enabled in Library.EnabledBaseThemes do
+            if Enabled then AnyBaseEnabled = true break end
+        end
+        if not AnyBaseEnabled then
+            Library.EnabledBaseThemes["Black Hole"] = true
+        end
+    end
+
+    -- Keep the two theming dev-flags in sync: AllowModsPlus is the
+    -- forward-facing name, AllowAdvancedTheming is kept for backwards
+    -- compatibility with scripts/checks already reading it directly.
+    Library.AllowAdvancedTheming = Library.AllowAdvancedTheming and Library.AllowModsPlus
 
     -- Folders
     for Index, Value in Library.Folders do 
@@ -7990,7 +8135,7 @@ end)
                 local ThemesSection = ThemingSubPage:Section({Name = "Themes", Side = 1}) do
                     if Library.AllowAdvancedTheming then
                         ThemesSection:Toggle({
-                            Name = "Advanced Mode",
+                            Name = "Mods+ (Import/Export Themes)",
                             Flag = "AdvancedTheming",
                             Default = SavedAdvancedTheming,
                             Callback = function(Value)
@@ -8001,9 +8146,28 @@ end)
                     end
 
                     if Library.AllowThemePresets then
+                        -- [Feature: Theme Tiers] Base themes are filtered
+                        -- individually via EnabledBaseThemes; Mods and Mods+
+                        -- are filtered as whole blocks via AllowMods /
+                        -- AllowModsPlus. Order: Base, then Mods, then Mods+,
+                        -- so the picker reads top-to-bottom by tier.
                         local PresetNames = { }
-                        for Name in Library.ThemePresets do
-                            TableInsert(PresetNames, Name)
+                        for _, Tier in {"Base", "Mods", "Mods+"} do
+                            for Name in Library.ThemePresets do
+                                if Library.ThemeTiers[Name] == Tier then
+                                    local Include = true
+                                    if Tier == "Base" then
+                                        Include = Library.EnabledBaseThemes[Name] == true
+                                    elseif Tier == "Mods" then
+                                        Include = Library.AllowMods == true
+                                    elseif Tier == "Mods+" then
+                                        Include = Library.AllowModsPlus == true
+                                    end
+                                    if Include then
+                                        TableInsert(PresetNames, Name)
+                                    end
+                                end
+                            end
                         end
                         -- "Custom" always present so colorpicker callbacks can
                         -- call PresetDropdown:Set("Custom") reliably.
@@ -8148,7 +8312,7 @@ end)
                     local ThemesSearchbox
 
                     -- Saved Themes CRUD list: Side=2 (RIGHT column, top).
-                    local ThemesListSection = ThemingSubPage:Section({Name = "Saved Themes", Side = 2}) do
+                    local ThemesListSection = ThemingSubPage:Section({Name = "Mods+ Library", Side = 2}) do
                         ThemesSearchbox = ThemesListSection:Searchbox({
                             Name = "SearchboxThemes",
                             Flag = "ThemesSearchbox",
